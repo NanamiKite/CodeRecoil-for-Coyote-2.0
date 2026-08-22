@@ -1,0 +1,12 @@
+.vscode/**
+.git/**
+.github/**
+.gitignore
+npm-debug.log
+*.map
+
+scripts/**
+README.md
+
+test/**
+tests/**

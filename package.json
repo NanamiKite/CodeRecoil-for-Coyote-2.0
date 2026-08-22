@@ -1,0 +1,127 @@
+{
+  "name": "coyote-2-code-punisher",
+  "displayName": "Coyote 2.0 Code Punisher",
+  "description": "Coyote 2.0 VS Code game feedback controller",
+  "version": "0.1.0",
+  "publisher": "nanami",
+  "license": "MIT",
+
+  "engines": {
+    "vscode": "^1.90.0"
+  },
+
+  "categories": [
+    "Other"
+  ],
+
+  "activationEvents": [
+    "onView:coyotePunisher.sidebar",
+    "onCommand:coyotePunisher.connect",
+    "onCommand:coyotePunisher.disconnect",
+    "onCommand:coyotePunisher.emergencyStop",
+    "onCommand:coyotePunisher.manualTest",
+    "onCommand:coyotePunisher.setIntensity"
+  ],
+
+  "main": "./src/extension.js",
+
+  "contributes": {
+
+    "commands": [
+      {
+        "command": "coyotePunisher.connect",
+        "title": "Coyote: Connect"
+      },
+      {
+        "command": "coyotePunisher.disconnect",
+        "title": "Coyote: Disconnect"
+      },
+      {
+        "command": "coyotePunisher.emergencyStop",
+        "title": "Coyote: Emergency Stop"
+      },
+      {
+        "command": "coyotePunisher.manualTest",
+        "title": "Coyote: Manual Test"
+      },
+      {
+        "command": "coyotePunisher.setIntensity",
+        "title": "Coyote: Set Intensity"
+      }
+    ],
+
+    "keybindings": [
+      {
+        "command": "coyotePunisher.emergencyStop",
+        "key": "ctrl+alt+s"
+      }
+    ],
+
+    "viewsContainers": {
+      "activitybar": [
+        {
+          "id": "coyotePunisher",
+          "title": "Coyote",
+          "icon": "resources/icon.svg"
+        }
+      ]
+    },
+
+    "views": {
+      "coyotePunisher": [
+        {
+          "type": "webview",
+          "id": "coyotePunisher.sidebar",
+          "name": "Coyote 2.0"
+        }
+      ]
+    },
+
+    "configuration": {
+      "title": "Coyote 2.0 Code Punisher",
+
+      "properties": {
+
+        "coyotePunisher.maxIntensity": {
+          "type": "number",
+          "default": 200,
+          "minimum": 0,
+          "maximum": 2047
+        },
+
+        "coyotePunisher.maxDuration": {
+          "type": "number",
+          "default": 5000,
+          "minimum": 100,
+          "maximum": 30000
+        },
+
+        "coyotePunisher.cooldown": {
+          "type": "number",
+          "default": 15,
+          "minimum": 0,
+          "maximum": 3600
+        },
+
+        "coyotePunisher.autoTrigger": {
+          "type": "boolean",
+          "default": false
+        }
+
+      }
+    }
+  },
+
+  "dependencies": {
+    "webbluetooth": "3.7.0"
+  },
+
+  "devDependencies": {
+    "@vscode/vsce": "^3.2.2"
+  },
+
+  "scripts": {
+    "build": "npm install --omit=dev",
+    "package": "npm install && node scripts/package.js"
+  }
+}

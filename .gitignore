@@ -1,0 +1,41 @@
+# 1. 忽略虚拟环境（根据你的实际命名选择，比如 .venv, venv, env 等）
+.venv/
+venv/
+env/
+ENV/
+
+# 2. 忽略 Python 自动生成的缓存和编译文件
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+
+# 3. 忽略 IDE 和编辑器的配置文件
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# 4. 忽略抓包日志、输出日志与本地缓存
+*.log
+*.cfile
+*.pcap
+*.pcapng
+btsnoop_hci*
+
+# 5. 忽略操作系统产生的临时文件
+.DS_Store
+Thumbs.db
+# 忽略前端依赖包
+node_modules/
+
+# 忽略构建/打包输出目录
+dist/
+build/
+.next/
+.output/
+
+# 忽略环境配置与日志
+.env
+.env.local
+*.log

@@ -1,0 +1,28 @@
+<svg
+    xmlns="http://www.w3.org/2000/svg"
+    viewBox="0 0 128 128"
+>
+    <path
+        d="M64 8
+           C36 8 16 30 16 58
+           C16 83 31 103 52 113
+           L52 91
+           C39 84 32 72 32 58
+           C32 40 46 24 64 24
+           C82 24 96 40 96 58
+           C96 72 89 84 76 91
+           L76 113
+           C97 103 112 83 112 58
+           C112 30 92 8 64 8Z"
+        fill="currentColor"
+    />
+
+    <circle
+        cx="64"
+        cy="58"
+        r="14"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="8"
+    />
+</svg>

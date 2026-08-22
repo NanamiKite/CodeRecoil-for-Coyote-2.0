@@ -1,0 +1,140 @@
+body {
+    padding: 10px;
+    color: var(--vscode-foreground);
+    background: var(--vscode-sideBar-background);
+    font-family: var(--vscode-font-family);
+    font-size: 12px;
+}
+
+.header {
+    display: flex;
+    justify-content: space-between;
+    align-items: center;
+    margin-bottom: 10px;
+}
+
+.header h2 {
+    margin: 0 0 4px 0;
+    font-size: 16px;
+}
+
+#state {
+    opacity: 0.75;
+}
+
+#battery {
+    font-size: 14px;
+    font-weight: bold;
+}
+
+.card {
+    border: 1px solid var(--vscode-panel-border);
+    border-radius: 5px;
+    padding: 9px;
+    margin-bottom: 9px;
+}
+
+.section-title {
+    font-weight: bold;
+    margin-bottom: 8px;
+}
+
+#device {
+    opacity: 0.8;
+    margin-bottom: 8px;
+    word-break: break-all;
+}
+
+.row {
+    display: flex;
+    gap: 6px;
+    margin-bottom: 8px;
+}
+
+label {
+    flex: 1;
+}
+
+input {
+    box-sizing: border-box;
+    width: 100%;
+    margin-top: 4px;
+    padding: 4px;
+
+    color:
+        var(--vscode-input-foreground);
+
+    background:
+        var(--vscode-input-background);
+
+    border:
+        1px solid var(--vscode-input-border);
+}
+
+button {
+    box-sizing: border-box;
+    width: 100%;
+    padding: 6px 8px;
+    margin-bottom: 5px;
+
+    color:
+        var(--vscode-button-foreground);
+
+    background:
+        var(--vscode-button-background);
+
+    border: none;
+    border-radius: 3px;
+
+    cursor: pointer;
+}
+
+button:hover {
+    background:
+        var(--vscode-button-hoverBackground);
+}
+
+button:disabled {
+    opacity: 0.45;
+    cursor: default;
+}
+
+.buttons {
+    display: flex;
+    gap: 5px;
+}
+
+.buttons button {
+    margin-bottom: 0;
+}
+
+.secondary {
+    color:
+        var(--vscode-button-secondaryForeground);
+
+    background:
+        var(--vscode-button-secondaryBackground);
+}
+
+.danger {
+    margin-top: 5px;
+    background:
+        var(--vscode-errorForeground);
+    color: white;
+}
+
+.raw {
+    margin-top: 8px;
+    font-family: monospace;
+    word-break: break-all;
+}
+
+#log {
+    max-height: 180px;
+    overflow-y: auto;
+    white-space: pre-wrap;
+    word-break: break-word;
+    font-family: monospace;
+    font-size: 10px;
+    opacity: 0.8;
+}
