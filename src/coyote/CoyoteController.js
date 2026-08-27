@@ -3,15 +3,10 @@ const { CoyoteProtocol } = require("./CoyoteProtocol");
 const { CoyoteSafety } = require("./CoyoteSafety");
 
 const BATTERY_SERVICE = "955a180a-0fe2-f5aa-a094-84b8d4f3e8ad";
-
 const CONTROL_SERVICE = "955a180b-0fe2-f5aa-a094-84b8d4f3e8ad";
-
 const BATTERY_LEVEL = "955a1500-0fe2-f5aa-a094-84b8d4f3e8ad";
-
 const PWM_AB2 = "955a1504-0fe2-f5aa-a094-84b8d4f3e8ad";
-
 const PWM_A34 = "955a1505-0fe2-f5aa-a094-84b8d4f3e8ad";
-
 const PWM_B34 = "955a1506-0fe2-f5aa-a094-84b8d4f3e8ad";
 
 class CoyoteController {
@@ -33,9 +28,7 @@ class CoyoteController {
      * 这里保存的是 App 挡位，
      * 不是协议 S。
      *
-     * 范围：
-     *
-     * 0 ~ 200
+     * 范围：0 ~ 200
      */
     this.channelA = 0;
     this.channelB = 0;
@@ -49,8 +42,16 @@ class CoyoteController {
     this.active = false;
 
     this.protocol = new CoyoteProtocol();
-
     this.safety = new CoyoteSafety();
+
+    // 惩罚定时器句柄
+    this.pulseTimer = null;
+
+    // 波形刷新定时器句柄（惩罚期间每 100ms 重发波形）
+    this.waveformRefreshTimer = null;
+
+    // 断开连接回调
+    this._onDisconnected = null;
   }
 
   async connect() {
@@ -66,7 +67,6 @@ class CoyoteController {
           namePrefix: "D-LAB",
         },
       ],
-
       optionalServices: [BATTERY_SERVICE, CONTROL_SERVICE],
     });
 
@@ -94,18 +94,13 @@ class CoyoteController {
       await batteryService.getCharacteristic(BATTERY_LEVEL);
 
     /*
-     * 一次性获取 Control Service
-     * 的全部 characteristic。
-     *
-     * 避免底层 BLE adapter 在连续
-     * getCharacteristic() 时出现问题。
+     * 一次性获取 Control Service 的全部 characteristic。
+     * 避免底层 BLE adapter 在连续 getCharacteristic() 时出现问题。
      */
     const characteristics = await controlService.getCharacteristics();
 
     this.pwmAB2 = characteristics.find((c) => c.uuid.toLowerCase() === PWM_AB2);
-
     this.pwmA34 = characteristics.find((c) => c.uuid.toLowerCase() === PWM_A34);
-
     this.pwmB34 = characteristics.find((c) => c.uuid.toLowerCase() === PWM_B34);
 
     if (!this.pwmAB2) {
@@ -121,10 +116,24 @@ class CoyoteController {
     }
 
     console.log("PWM_AB2 properties:", this.pwmAB2.properties);
-
     console.log("PWM_A34 properties:", this.pwmA34.properties);
-
     console.log("PWM_B34 properties:", this.pwmB34.properties);
+
+    /*
+     * 监听设备断开连接事件，
+     * 防止断开后 this.connected 仍为 true。
+     */
+    this._onDisconnected = () => {
+      console.log("[Coyote] 设备已断开连接 (gattserverdisconnected)");
+      this._clearAllTimers();
+      this.connected = false;
+      this.active = false;
+      this.channelA = 0;
+      this.channelB = 0;
+      this.lastIntensityRaw = "--";
+      this.battery = null;
+    };
+    this.device.addEventListener("gattserverdisconnected", this._onDisconnected);
 
     this.connected = true;
 
@@ -156,8 +165,6 @@ class CoyoteController {
 
   /*
    * 统一处理 BLE 写入。
-   *
-   * 原有实现保持不变。
    */
   async writeCharacteristic(characteristic, data) {
     if (!characteristic) {
@@ -174,7 +181,7 @@ class CoyoteController {
       `BLE write ${characteristic.uuid}:`,
       Array.from(bytes)
         .map((x) => x.toString(16).padStart(2, "0").toUpperCase())
-        .join(" "),
+        .join(" ")
     );
 
     const properties = characteristic.properties || {};
@@ -187,9 +194,7 @@ class CoyoteController {
       typeof characteristic.writeValueWithoutResponse === "function"
     ) {
       console.log("Using writeValueWithoutResponse()");
-
       await characteristic.writeValueWithoutResponse(bytes);
-
       return;
     }
 
@@ -201,9 +206,7 @@ class CoyoteController {
       typeof characteristic.writeValueWithResponse === "function"
     ) {
       console.log("Using writeValueWithResponse()");
-
       await characteristic.writeValueWithResponse(bytes);
-
       return;
     }
 
@@ -212,9 +215,7 @@ class CoyoteController {
      */
     if (typeof characteristic.writeValue === "function") {
       console.log("Using writeValue()");
-
       await characteristic.writeValue(bytes);
-
       return;
     }
 
@@ -224,27 +225,8 @@ class CoyoteController {
   /*
    * 设置 A / B 强度。
    *
-   * 注意：
-   *
-   * 外部传入的是 App 挡位：
-   *
-   *     0 ~ 200
-   *
-   * 不是协议 S。
-   *
-   * 最终发送：
-   *
-   *     S = AppLevel × 7
-   *
-   * 所以：
-   *
-   *     App 20
-   *       ↓
-   *     S 140
-   *
-   *     App 200
-   *       ↓
-   *     S 1400
+   * 外部传入 App 挡位：0 ~ 200
+   * 协议转换：S = AppLevel × 7
    */
   async setIntensity(a, b) {
     if (!this.connected) {
@@ -252,22 +234,26 @@ class CoyoteController {
     }
 
     a = this.safety.intensity(a);
-
     b = this.safety.intensity(b);
 
     const protocolA = a * 7;
     const protocolB = b * 7;
-    const data = this.protocol.encodeIntensity(protocolA, protocolB);
 
     /*
-     * 输出最终发送给 PWM_AB2 的 BLE 数据包。
-     *
-     * 数据格式：
-     *
-     * 23-22 : 保留
-     * 21-11 : A 通道强度
-     * 10-0  : B 通道强度
+     * 防御性检查：
+     * 即使 safety.intensity() 已经钳制了 App 挡位，
+     * 仍需确认最终协议值不超过 11-bit 上限。
+     * 若未来 maxIntensity 被修改为 > 292（292×7=2044），
+     * 此处可防止越界。
      */
+    if (protocolA > 0x7ff || protocolB > 0x7ff) {
+      throw new Error(
+        `Protocol intensity out of range: A=${protocolA}, B=${protocolB}, max=2047`
+      );
+    }
+
+    const data = this.protocol.encodeIntensity(protocolA, protocolB);
+
     const hex = Array.from(data)
       .map((x) => x.toString(16).padStart(2, "0").toUpperCase())
       .join(" ");
@@ -278,8 +264,151 @@ class CoyoteController {
 
     this.channelA = a;
     this.channelB = b;
+    this.lastIntensityRaw = hex;
 
     this.active = a > 0 || b > 0;
+  }
+
+  /**
+   * 增强版惩罚触发专用函数
+   * 支持传入对象（全配置）或传统多参数模式，支持通道选择与自动下发波形
+   *
+   * config 对象格式：
+   * {
+   *   targetIntensity: number,   // App 挡位 (0~200)
+   *   maxIntensity: number,      // 安全上限 (App 挡位)
+   *   durationMs: number,        // 持续时间 ms
+   *   maxDurationMs: number,     // 最大持续时间 ms
+   *   channelA: boolean,         // 是否激活 A 通道
+   *   channelB: boolean,         // 是否激活 B 通道
+   *   waveform: [x, y, z],       // 波形参数，若为 null 则不发送波形
+   *   waveformData: [[x,y,z],...], // 波形序列（多帧循环），优先于 waveform
+   *   waveformInterval: number,  // 波形帧间隔 ms，默认 100
+   * }
+   */
+  async triggerPunishment(
+    config = {},
+    maxIntensity = 200,
+    durationMs = 1000,
+    maxDurationMs = 5000
+  ) {
+    if (!this.connected) return;
+    console.log("[Coyote Debug] triggerPunishment 被调用，原始参数:", config);
+    console.trace("[Coyote Debug] 调用栈:");
+    let targetIntensity = 0;
+    let channelA = true;
+    let channelB = false;
+    let waveform = null;
+    let waveformData = null;
+    let waveformInterval = 100;
+
+    // 解析参数类型
+    if (typeof config === "object" && config !== null && !Array.isArray(config)) {
+      targetIntensity = config.targetIntensity ?? config.intensity ?? 0;
+      maxIntensity = config.maxIntensity ?? maxIntensity;
+      durationMs = config.durationMs ?? config.duration ?? durationMs;
+      maxDurationMs = config.maxDurationMs ?? maxDurationMs;
+      channelA = config.channelA ?? channelA;
+      channelB = config.channelB ?? channelB;
+      waveform = config.waveform ?? null;
+      waveformData = config.waveformData ?? null;
+      waveformInterval = config.waveformInterval ?? 100;
+    } else {
+      targetIntensity = Number(config) || 0;
+    }
+
+    // 严苛边界钳制
+    const finalIntensity = Math.min(targetIntensity, maxIntensity);
+    const finalDuration = Math.min(durationMs, maxDurationMs);
+
+    if (finalIntensity <= 0 || finalDuration <= 0) {
+      await this.setIntensity(0, 0);
+      return;
+    }
+
+    // 1. 确定要循环发送的波形帧序列
+    let frames = null;
+    if (waveformData && Array.isArray(waveformData) && waveformData.length > 0) {
+      frames = waveformData;
+    } else if (waveform && Array.isArray(waveform) && waveform.length >= 3) {
+      frames = [waveform];
+    }
+
+    // 2. 清除未完结的定时器
+    this._clearAllTimers();
+
+    // 3. 如果有波形，立即发送第一帧并启动 100ms 刷新
+    if (frames) {
+      let frameIndex = 0;
+      const endTime = Date.now() + finalDuration;
+
+      const sendFrame = async () => {
+        if (Date.now() >= endTime) return;
+        if (!this.connected) return;
+
+        const frame = frames[frameIndex % frames.length];
+        try {
+          if (channelA) {
+            await this.setWaveformA(frame[0], frame[1], frame[2]);
+          }
+          if (channelB) {
+            await this.setWaveformB(frame[0], frame[1], frame[2]);
+          }
+          frameIndex++;
+        } catch (err) {
+          console.error("[Coyote Punisher] 波形帧发送失败:", err);
+        }
+      };
+
+      // 立即发送第一帧
+      await sendFrame();
+
+      // 每 waveformInterval 重发一帧
+      this.waveformRefreshTimer = setInterval(() => {
+        sendFrame().catch((err) => {
+          console.error("[Coyote Punisher] 波形刷新失败:", err);
+        });
+      }, waveformInterval);
+    }
+
+    // 4. 计算实际输出的通道强度
+    const valA = channelA ? finalIntensity : 0;
+    const valB = channelB ? finalIntensity : 0;
+
+    console.log(
+      `[Coyote Punisher] 激活惩罚 -> A:${valA}, B:${valB}, 持续时间: ${finalDuration}ms`
+    );
+
+    // 5. 下发强度
+    await this.setIntensity(valA, valB);
+
+    // 6. 设置倒计时：持续时间结束后自动归零
+    this.pulseTimer = setTimeout(async () => {
+      try {
+        console.log("[Coyote Punisher] 惩罚结束，强度归零");
+        this._clearAllTimers();
+        await this.setIntensity(0, 0);
+      } catch (err) {
+        console.error("惩罚归零失败:", err);
+      } finally {
+        this.pulseTimer = null;
+        this.waveformRefreshTimer = null;
+      }
+    }, finalDuration);
+  }
+
+  /**
+   * 清除所有定时器（惩罚计时器 + 波形刷新计时器）
+   */
+  _clearAllTimers() {
+    if (this.pulseTimer) {
+      clearTimeout(this.pulseTimer);
+      this.pulseTimer = null;
+    }
+    if (this.waveformRefreshTimer) {
+      clearInterval(this.waveformRefreshTimer);
+      this.waveformRefreshTimer = null;
+    }
   }
 
   async readIntensity() {
@@ -291,23 +420,18 @@ class CoyoteController {
       throw new Error("PWM_AB2 未初始化");
     }
 
-    /*
-     * 1504 虽然协议表写着可读，
-     * 但设备可能返回 0 byte。
-     */
     const value = await this.pwmAB2.readValue();
 
     const data = new Uint8Array(
       value.buffer,
       value.byteOffset,
-      value.byteLength,
+      value.byteLength
     );
 
     console.log(`PWM_AB2 read: ${data.length} byte(s)`);
 
     if (data.length === 0) {
       console.log("Coyote returned no readable PWM_AB2 payload.");
-
       return null;
     }
 
@@ -315,24 +439,11 @@ class CoyoteController {
       throw new Error(`PWM_AB2 returned ${data.length} bytes`);
     }
 
-    /*
-     * 使用已经验证过的
-     * PWM_AB2 解码算法。
-     *
-     * result.a / result.b
-     * 此时是协议 S。
-     */
     const result = this.protocol.decodeIntensity(data);
 
     console.log(`PWM_AB2 protocol S -> A=${result.a} B=${result.b}`);
 
-    /*
-     * 协议 S → App 挡位。
-     *
-     * S / 7
-     */
     this.channelA = this.safety.protocolToIntensity(result.a);
-
     this.channelB = this.safety.protocolToIntensity(result.b);
 
     this.lastIntensityRaw = Array.from(data)
@@ -343,10 +454,6 @@ class CoyoteController {
 
     this.active = this.channelA > 0 || this.channelB > 0;
 
-    /*
-     * 返回值也保持为 App 挡位，
-     * 与 controller.channelA/B 一致。
-     */
     return {
       a: this.channelA,
       b: this.channelB,
@@ -358,9 +465,11 @@ class CoyoteController {
       throw new Error("Coyote 未连接");
     }
 
-    const data = this.protocol.encodeWaveformA(x, y, z);
+    const parsed = this._parseWaveformArgs(x, y, z);
+    const data = this.protocol.encodeWaveformA(parsed.x, parsed.y, parsed.z);
 
     await this.writeCharacteristic(this.pwmA34, data);
+    this.active = true;
   }
 
   async setWaveformB(x, y, z) {
@@ -368,123 +477,61 @@ class CoyoteController {
       throw new Error("Coyote 未连接");
     }
 
-    const data = this.protocol.encodeWaveformB(x, y, z);
+    const parsed = this._parseWaveformArgs(x, y, z);
+    const data = this.protocol.encodeWaveformB(parsed.x, parsed.y, parsed.z);
 
     await this.writeCharacteristic(this.pwmB34, data);
+    this.active = true;
   }
 
   /*
-   * 波形统一入口。
-   *
-   * 支持：
-   *
-   * setWaveform([5, 135, 20])
-   *
-   * setWaveform(5, 135, 20)
-   *
-   * setWaveform({
-   *     x: 5,
-   *     y: 135,
-   *     z: 20
-   * })
+   * 波形统一入口（默认控制 A 通道）
    */
   async setWaveform(x, y, z) {
-    if (!this.connected) {
-      throw new Error("Coyote 未连接");
-    }
+    await this.setWaveformA(x, y, z);
+  }
 
-    /*
-     * 情况 1：
-     *
-     * setWaveform([5, 135, 20])
-     */
+  /**
+   * 内部私有辅助方法：解构、清洗并校验波形参数 (x, y, z)
+   */
+  _parseWaveformArgs(x, y, z) {
     if (Array.isArray(x)) {
       if (x.length < 3) {
         throw new Error("波形参数必须包含 3 个数字");
       }
-
       const frame = x;
-
       x = frame[0];
       y = frame[1];
       z = frame[2];
     } else if (x !== null && typeof x === "object") {
-
-    /*
-     * 情况 2：
-     *
-     * setWaveform({
-     *     x: 5,
-     *     y: 135,
-     *     z: 20
-     * })
-     *
-     * 同时兼容：
-     *
-     * {
-     *     a: 5,
-     *     b: 135,
-     *     c: 20
-     * }
-     */
       const frame = x;
-
       if (
         frame.x !== undefined ||
         frame.y !== undefined ||
         frame.z !== undefined
       ) {
+        x = frame.x;
         y = frame.y;
         z = frame.z;
-        x = frame.x;
       } else {
+        x = frame.a;
         y = frame.b;
         z = frame.c;
-        x = frame.a;
       }
     }
 
-    /*
-     * UI / JSON 数据有可能把数字
-     * 传成字符串。
-     *
-     * 这里统一转换。
-     */
     x = Number(x);
     y = Number(y);
     z = Number(z);
 
-    console.log("Coyote setWaveform parameters:", {
-      x: x,
-      y: y,
-      z: z,
-    });
-
-    /*
-     * 检查转换后的最终参数。
-     */
     if (!Number.isFinite(x) || !Number.isFinite(y) || !Number.isFinite(z)) {
       throw new Error("波形参数必须是有效数字");
     }
 
-    /*
-     * 当前 WaveformPresets
-     * 全部使用整数。
-     */
     if (!Number.isInteger(x) || !Number.isInteger(y) || !Number.isInteger(z)) {
       throw new Error("波形参数必须是整数");
     }
 
-    /*
-     * X：5 bit
-     * Y：10 bit
-     * Z：5 bit
-     *
-     * 这里增加边界检查。
-     *
-     * 不改变编码算法，
-     * 只是防止非法参数进入协议层。
-     */
     if (x < 0 || x > 31) {
       throw new Error("X 范围必须是 0 ~ 31");
     }
@@ -497,15 +544,7 @@ class CoyoteController {
       throw new Error("Z 范围必须是 0 ~ 31");
     }
 
-    /*
-     * 使用已有的 PWM_A34
-     * 波形写入实现。
-     *
-     * 原有算法保持不变。
-     */
-    await this.setWaveformA(x, y, z);
-
-    this.active = true;
+    return { x, y, z };
   }
 
   async test() {
@@ -513,26 +552,14 @@ class CoyoteController {
       throw new Error("Coyote 未连接");
     }
 
-    /*
-     * 当前测试：
-     *
-     * App A = 10
-     * App B = 0
-     *
-     * 经过新的强度映射后：
-     *
-     * S A = 70
-     * S B = 0
-     *
-     * 用于验证 1504 写入链路。
-     */
     await this.setIntensity(10, 0);
   }
 
   async emergencyStop() {
+    this._clearAllTimers();
+
     if (!this.connected) {
       this.active = false;
-
       return;
     }
 
@@ -544,6 +571,15 @@ class CoyoteController {
   }
 
   async disconnect() {
+    this._clearAllTimers();
+
+    try {
+      if (this.device && this._onDisconnected) {
+        this.device.removeEventListener("gattserverdisconnected", this._onDisconnected);
+        this._onDisconnected = null;
+      }
+    } catch (_) {}
+
     try {
       if (this.device && this.device.gatt && this.device.gatt.connected) {
         this.device.gatt.disconnect();
@@ -574,6 +610,15 @@ class CoyoteController {
   }
 
   dispose() {
+    this._clearAllTimers();
+
+    try {
+      if (this.device && this._onDisconnected) {
+        this.device.removeEventListener("gattserverdisconnected", this._onDisconnected);
+        this._onDisconnected = null;
+      }
+    } catch (_) {}
+
     try {
       if (this.device && this.device.gatt && this.device.gatt.connected) {
         this.device.gatt.disconnect();

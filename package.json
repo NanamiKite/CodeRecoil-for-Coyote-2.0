@@ -105,7 +105,7 @@
 
         "coyotePunisher.autoTrigger": {
           "type": "boolean",
-          "default": false
+          "default": true
         }
 
       }
