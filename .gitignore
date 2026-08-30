@@ -1,43 +1,45 @@
-# 1. 忽略虚拟环境（根据你的实际命名选择，比如 .venv, venv, env 等）
+# Python
 .venv/
 venv/
 env/
 ENV/
-
-# 2. 忽略 Python 自动生成的缓存和编译文件
 __pycache__/
 *.py[cod]
 *$py.class
 .pytest_cache/
 
-# 3. 忽略 IDE 和编辑器的配置文件
+# IDE / Editor
 .idea/
 .vscode/
 *.swp
 *.swo
-*.package-lock.json
-*.tsconfig.json
 
-# 4. 忽略抓包日志、输出日志与本地缓存
+# Local project files
+package-lock.json
+tsconfig.json
+.vscodeignore
+design.md
+
+# Logs / capture files / local cache
 *.log
 *.cfile
 *.pcap
 *.pcapng
 btsnoop_hci*
 
-# 5. 忽略操作系统产生的临时文件
+# OS temporary files
 .DS_Store
 Thumbs.db
-# 忽略前端依赖包
+
+# Node.js dependencies
 node_modules/
 
-# 忽略构建/打包输出目录
+# Build / packaging output
 dist/
 build/
 .next/
 .output/
 
-# 忽略环境配置与日志
+# Environment
 .env
 .env.local
-*.log
