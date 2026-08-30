@@ -1,504 +1,83 @@
-一、项目定位
-Coyote 2.0 Code Punisher
-这是一个运行在 VS Code 内部的游戏化代码反馈插件。
-插件监听 VS Code 中的代码诊断、测试等开发事件，根据用户配置的游戏规则触发 Coyote 2.0 的预设动作。
-整体逻辑：
-
-VS Code 开发事件
-        ↓
-    事件解析
-        ↓
-    游戏规则引擎
-        ↓
-    选择 / 生成惩罚预设
-        ↓
-    Coyote 2.0 控制层
-        ↓
-      BLE / GATT
-        ↓
-    Coyote 2.0
-
-二、核心硬约束
-1. 用户零额外安装
-最终用户只需要：
-
-安装 VS Code
-        ↓
-安装 Coyote 插件 VSIX
-        ↓
-使用
-
-禁止要求用户额外安装：
-
-Python
-Node.js
-npm
-Visual Studio
-C++ Build Tools
-node-gyp
-Noble
-Zadig
-WinUSB
-Bridge
-独立后台服务
-手机 App
-
-开发阶段可以使用 C/C++ 工具链构建原生模块，但这些工具不能成为用户运行插件的依赖。
-
-2. 优先 Windows
-第一阶段目标：
-
-Windows
-  +
-VS Code
-  +
-Coyote 2.0
-
-暂不为了跨平台增加架构复杂度。
-
-3. 直接连接 Coyote 2.0
-目标架构：
-
-VS Code Extension
-        ↓
-电脑 BLE
-        ↓
-Coyote 2.0
-
-不经过手机或外部 Bridge。
-
-4. 控制协议必须以 Coyote 2.0 官方协议为准
-插件内部不得硬编码未经验证的 UUID、数据包和停止包。
-BLE 层需要独立实现：
-
-设备发现
-连接
-GATT Service
-Characteristic
-设备状态
-电量
-A/B 通道
-波形
-强度
-停止
-
-三、总体软件架构
-插件分成五层：
-
-┌──────────────────────────────┐
-│          VS Code UI          │
-│        Sidebar / Webview     │
-└──────────────┬───────────────┘
-               │
-┌──────────────▼───────────────┐
-│       Game Rule Engine       │
-│  触发器 / 冷却 / 状态 / 规则 │
-└──────────────┬───────────────┘
-               │
-┌──────────────▼───────────────┐
-│        Preset Manager        │
-│  强度 / A/B / 波形 / 持续时间│
-└──────────────┬───────────────┘
-               │
-┌──────────────▼───────────────┐
-│       Coyote Controller      │
-│   设备状态 / 命令 / 安全限制 │
-└──────────────┬───────────────┘
-               │
-┌──────────────▼───────────────┐
-│          BLE Layer            │
-│       Windows BLE / GATT      │
-└──────────────────────────────┘
-
-其中：
-UI 不直接操作 BLE。
-VS Code Diagnostic 不直接操作 BLE。
-所有动作必须经过：
-
-Event
- → Rule
- → Preset
- → Safety
- → Coyote Controller
- → BLE
-
-四、VS Code 事件系统
-第一阶段支持以下事件：
-
-1. Error 出现
-Error 从 0 → >0
-
-2. Error 数量达到阈值
-例如：
+# Coyote 2.0 Code Punisher
 
-Error >= 3
+免责声明
 
-3. Error 连续存在
-例如：
+重要：本项目仅供技术研究、软件开发与个人实验使用。
 
-Error 持续 30 秒
+Coyote 2.0 Code Punisher 会通过 BLE 控制兼容设备输出电脉冲，并支持根据 VS Code 的诊断、编译失败及保存事件自动触发输出。用户应充分了解所连接设备及其输出特性，并自行确认设备适用于当前使用场景。
 
-4. 测试失败
-后续可以监听 VS Code Test API。
+本项目作者及贡献者不对因使用本插件、修改源码、连接第三方设备、设备故障、协议实现差异、配置错误、自动触发、异常断连或其他不可预见情况所造成的任何直接或间接损失、设备损坏、人身伤害或其他后果承担责任。
 
-5. 手动触发
-UI：
+插件内置的强度、时长、波形及协议范围限制属于软件层面的安全措施，不构成对设备实际输出或使用安全性的保证。不同硬件、固件版本及设备状态可能导致实际行为与软件预期存在差异；不得仅依据本插件中的限制判断设备是否安全。
 
-[手动测试]
+使用自动触发功能前，请确认：
 
-6. 后续扩展
-架构允许加入：
+设备处于适当且可控的使用状态；
+已了解设备制造商提供的安全说明及限制；
+已正确配置强度、时长、冷却时间等参数；
+能够在异常情况下立即停止设备输出；
+不将自动触发功能用于无法随时人工干预的场景。
 
-编译失败
-Debug 异常
-任务失败
-Git 操作
-代码审查结果
-AI Review
+如出现异常输出、设备行为异常、无法停止或任何不确定情况，应立即停止使用并断开设备。
 
-五、规则引擎
-事件不能直接决定 Coyote 参数。
-例如错误事件：
+使用本项目即表示你理解并接受上述风险，并自行承担使用本项目及相关设备产生的责任。
 
-Error Event
-     ↓
-Trigger Rule
-     ↓
-Penalty Event
+> 让每一个 Bug 都留下深刻印象。
 
-规则包含：
+适用于郊狼2.0的控制器，主动控制或在保存文件或编译失败时根据错误数量自动触发电脉冲输出。
 
-触发条件
-触发次数
-冷却时间
-使用哪个 Preset
-是否允许重复触发
+## 功能
 
-例如：
+- 连接 BLE 设备（设备名前缀 D-LAB）
+- A/B 双通道强度独立控制
+- 3 种预设波形（频率递增、双频切换、推力变化），步进间隔可调
+- 保存/编译出错时自动触发，强度和时长随错误数线性递增
+- 冷却倒计时实时显示在侧边栏
+- 紧急停止按钮 + 快捷键 Ctrl+Alt+S
+- 所有参数在侧边栏 UI 配置，不依赖 VS Code settings.json
 
-规则：
+## 自动触发
 
-事件：Error
-条件：Error >= 1
-冷却：15 秒
-Preset：普通错误
+侧边栏开启「自动触发」后，三个触发源：
 
-这样连续收到：
+1. **诊断变化** -- 语言服务报错后立即响应。
+2. **Task 失败** -- 终端编译/构建进程退出码非 0
+3. **保存文件** -- 500ms 延迟兜底，兼容不触发诊断变化的语言服务
 
-Error
-Error
-Error
-Error
+### 错误数映射
 
-不会产生四次动作。
-六、Preset 预设系统
-这是整个插件的核心用户配置对象。
-一个 Preset：
+开启「按错误数递增」后，1 个错误 = 基础值，10 个错误 = 上限值，中间线性插值。关闭则固定使用基础值。
 
-Preset
-├── 名称
-├── Channel A
-│   ├── Enabled
-│   └── Intensity
-├── Channel B
-│   ├── Enabled
-│   └── Intensity
-├── Waveform
-├── Play Mode
-├── Duration
-├── Waveform Interval
-└── Randomization
+每次触发后进入冷却期（默认 15 秒），冷却时间内所有事件忽略，侧边栏显示倒计时。
 
-例如：
+## 安全机制
 
-普通错误
+- 强度/时长上限在 Controller 层强制钳制，不仅限于 UI
+- 波形 Z 值自动钳制到 15 以下（Z>20 脉冲宽度超 100us，产生刺痛）
+- 紧急停止清除所有定时器（脉冲 + 波形刷新）并归零输出
+- 设备断开时自动清除全部状态
+- CoyoteSafety 独立于 UI，即使绕过 webview 也不会超过协议上限 2047
 
-A：开启
-B：关闭
+## 从源码安装
 
-基础强度：10
-随机范围：±2
+    npm install -g @vscode/vsce
+    cd vscode-coyote-punisher
+    vsce package
 
-波形：呼吸
+安装生成的 .vsix 文件即可。
 
-持续：5 秒
+## 项目结构
 
-播放模式：单波形
+    src/
+    ├── extension.js              # 插件入口，注册命令与事件监听
+    ├── coyote/
+    │   ├── CoyoteProtocol.js      # BLE 数据包编码/解码
+    │   ├── CoyoteController.js   # 设备连接、强度/波形控制、惩罚触发
+    │   └── CoyoteSafety.js        # 安全阈值钳制
+    └── ui/
+        └── CoyoteSidebarProvider.js # 侧边栏 Webview、惩罚配置 UI
 
-七、A/B 通道
-Coyote 2.0 的两个通道应该在插件中独立表示。
-UI：
+## 许可证
 
-Channel A   ☑
-Intensity   10
+MIT
 
-Channel B   ☐
-Intensity   10
-
-允许：
-
-A 单独
-B 单独
-A+B 同时
-
-后续可以加入：
-
-B = A × 1.2
-
-这种相对配置。
-但底层仍然必须转换为 Coyote 2.0 的实际协议格式。
-八、波形系统
-波形不应该让普通用户直接编辑协议中的底层参数。
-普通 UI：
-
-波形：
-
-[ 呼吸 ▼ ]
-
-播放方式：
-
-○ 单波形
-○ 顺序
-○ 随机
-
-切换间隔：
-
-[ 5 秒 ]
-
-高级设置才允许看到：
-
-X
-Y
-Z
-
-等底层参数。
-同时支持波形预设：
-
-Waveform
-├── 名称
-├── X
-├── Y
-└── Z
-
-九、随机机制
-为了让玩法更加自然，强度不应该只能固定：
-
-10
-
-可以设置：
-
-基础强度：10
-随机范围：±2
-
-最终：
-
-8 ~ 12
-
-但随机结果必须经过安全限制：
-
-finalIntensity =
-    clamp(
-        generatedIntensity,
-        0,
-        maxStrength
-    )
-
-十、冷却机制
-必须有。
-例如：
-
-触发
- ↓
-执行 Preset
- ↓
-Cooldown 15s
- ↓
-期间事件全部忽略/合并
- ↓
-恢复 Armed
-
-避免 VS Code 在短时间连续报告诊断变化导致重复触发。
-十一、插件状态机
-核心状态：
-
-DISCONNECTED
-      ↓
-CONNECTING
-      ↓
-CONNECTED
-      ↓
-ARMED
-      ↓
-TRIGGERED
-      ↓
-COOLDOWN
-      ↓
-ARMED
-
-任何状态都可以进入：
-
-EMERGENCY_STOP
-
-急停后：
-
-ACTIVE
-  ↓
-EMERGENCY_STOP
-  ↓
-SAFE / DISARMED
-
-不会自动恢复执行。
-十二、安全机制
-安全限制不是 UI 功能，而是核心控制层功能。
-
-最大强度
-maxStrength
-
-必须在 Controller 层再次限制。
-即使 UI 被绕过：
-
-Rule Engine
-    ↓
-Controller
-    ↓
-Safety Clamp
-
-依然不能超过限制。
-
-Emergency Stop
-两个入口：
-
-侧边栏：
-[ ■ 紧急停止 ]
-
-快捷键：
-Ctrl + Alt + S
-
-急停命令直接进入 Controller。
-而不是依赖 UI JavaScript。
-十三、侧边栏 UI
-我建议最终采用状态 + 模式 + 预设 + 操作四段式，而不是把所有参数同时展开。
-
-┌─────────────────────────────┐
-│ Coyote 2.0                  │
-│ ● 已连接             78%    │
-├─────────────────────────────┤
-│ 当前状态                    │
-│                             │
-│ Error              3        │
-│ A ● 工作中    B ○ 待机     │
-│ 波形：呼吸                  │
-│                             │
-├─────────────────────────────┤
-│ 游戏模式                    │
-│                             │
-│ [ Error 惩罚          ▼ ]   │
-│                             │
-│ 触发条件：Error ≥ 1        │
-│ 冷却时间：15 s              │
-│                             │
-├─────────────────────────────┤
-│ 当前预设                    │
-│                             │
-│ [ 普通错误            ▼ ]   │
-│                             │
-│ A ☑     B ☐                │
-│ 强度：10                    │
-│ 波形：呼吸                  │
-│                             │
-├─────────────────────────────┤
-│                             │
-│       [ 手动测试 ]          │
-│                             │
-│       [ ■ 紧急停止 ]        │
-└─────────────────────────────┘
-
-十四、设置页面
-普通用户看到的是简单参数。
-高级设置：
-
-设置
-├── 游戏模式
-│   ├── 触发器
-│   ├── 冷却策略
-│   └── 自动执行
-│
-├── Preset
-│   ├── 新建
-│   ├── 编辑
-│   ├── 删除
-│   └── 导入/导出
-│
-├── Waveform
-│   ├── 波形库
-│   └── 自定义波形
-│
-├── Safety
-│   ├── 最大强度
-│   └── 最大持续时间
-│
-└── Advanced
-    └── Coyote BLE
-
-十五、默认模式
-安装插件后，不应该默认马上触发。
-默认：
-
-BLE：未连接
-游戏模式：关闭
-自动触发：关闭
-
-用户必须主动：
-
-连接设备
- ↓
-选择模式
- ↓
-选择 Preset
- ↓
-开启自动触发
-
-这样避免插件安装后因为 IDE 已经存在 Error 就立即执行。
-十六、项目结构
-最终建议：
-
-vscode-coyote-punisher/
-│
-├── src/
-│   ├── extension.ts
-│   │
-│   ├── ui/
-│   │   └── CoyoteSidebarProvider.ts
-│   │
-│   ├── events/
-│   │   ├── DiagnosticMonitor.ts
-│   │   └── TestMonitor.ts
-│   │
-│   ├── game/
-│   │   ├── GameEngine.ts
-│   │   ├── TriggerRule.ts
-│   │   ├── GameState.ts
-│   │   └── CooldownManager.ts
-│   │
-│   ├── preset/
-│   │   ├── Preset.ts
-│   │   └── PresetManager.ts
-│   │
-│   ├── coyote/
-│   │   ├── CoyoteController.ts
-│   │   ├── CoyoteDevice.ts
-│   │   ├── CoyoteProtocol.ts
-│   │   └── CoyoteSafety.ts
-│   │
-│   └── ble/
-│       └── WindowsBle.ts
-│
-├── native/
-│   └── coyote_ble.node
-│
-├── resources/
-│   └── icon.svg
-│
-├── package.json
-├── tsconfig.json
-└── README.md
