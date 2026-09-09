@@ -468,7 +468,8 @@ class CoyoteController {
     const parsed = this._parseWaveformArgs(x, y, z);
     const data = this.protocol.encodeWaveformA(parsed.x, parsed.y, parsed.z);
 
-    await this.writeCharacteristic(this.pwmA34, data);
+    // The V2 table assigns 1506 (PWM_B34) to the physical A output.
+    await this.writeCharacteristic(this.pwmB34, data);
     this.active = true;
   }
 
@@ -480,7 +481,8 @@ class CoyoteController {
     const parsed = this._parseWaveformArgs(x, y, z);
     const data = this.protocol.encodeWaveformB(parsed.x, parsed.y, parsed.z);
 
-    await this.writeCharacteristic(this.pwmB34, data);
+    // The V2 table assigns 1505 (PWM_A34) to the physical B output.
+    await this.writeCharacteristic(this.pwmA34, data);
     this.active = true;
   }
 

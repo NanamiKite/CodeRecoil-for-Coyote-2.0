@@ -110,11 +110,10 @@ class CoyoteProtocol {
   }
 
   /*
-   * 默认使用 Big-Endian（保持原始行为）。
-   * 验证后若需切换为 LE，将此处改为 encodeWaveformALittleEndian 即可。
+   * V2 波形帧使用 Little-Endian。官方 [1, 9, 20] 示例为 21 01 0A。
    */
   encodeWaveformA(x, y, z) {
-    return this.encodeWaveformABigEndian(x, y, z);
+    return this.encodeWaveformALittleEndian(x, y, z);
   }
 
   /*
@@ -144,10 +143,10 @@ class CoyoteProtocol {
   }
 
   /*
-   * 默认使用 Big-Endian（保持原始行为）。
+   * V2 波形帧使用 Little-Endian；A / B 的字节格式相同。
    */
   encodeWaveformB(x, y, z) {
-    return this.encodeWaveformBBigEndian(x, y, z);
+    return this.encodeWaveformBLittleEndian(x, y, z);
   }
 }
 
