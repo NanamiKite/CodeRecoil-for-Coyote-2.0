@@ -85,6 +85,7 @@ function activate(context) {
 
   let lastPunishTime = 0;
   let cooldownTimer = null;
+  let punishCheckTimer = null;
 
   function getErrorCount() {
     let errorCount = 0;
@@ -99,11 +100,24 @@ function activate(context) {
   }
 
   /*
-   * 按错误数线性递增：1 个错误 = 基础值，10 个错误 = 上限值。
-   * 中间线性插值。
+   * S(e) = S_base + A * ln(1 + k * e^p).
+   * The user's base and maximum remain authoritative. A is derived so that
+   * 100 errors reaches the configured maximum; the clamp is the safety cap.
    */
-  function scaleByErrorCount(errorCount, base, max) {
-    const t = Math.min((errorCount - 1) / 9, 1);
+  function scaleIntensityByErrorCount(errorCount, base, max) {
+    const minimum = Math.min(base, max);
+    const maximum = Math.max(base, max);
+    const k = 0.15;
+    const p = 1.4;
+    const referenceErrors = 100;
+    const progress = Math.log1p(k * Math.pow(Math.max(1, errorCount), p));
+    const fullScale = Math.log1p(k * Math.pow(referenceErrors, p));
+    return Math.round(Math.min(maximum, minimum + (maximum - minimum) * progress / fullScale));
+  }
+
+  // Duration remains a user-configured linear range and is capped separately.
+  function scaleDurationByErrorCount(errorCount, base, max) {
+    const t = Math.min((Math.max(1, errorCount) - 1) / 99, 1);
     return Math.round(base + (max - base) * t);
   }
 
@@ -148,8 +162,8 @@ function activate(context) {
     let finalIntensity, finalDurationMs;
 
     if (cfg.scaleByErrors) {
-      finalIntensity = scaleByErrorCount(errorCount, cfg.intensity, cfg.maxIntensity);
-      finalDurationMs = scaleByErrorCount(errorCount, cfg.durationMs, cfg.maxDurationMs);
+      finalIntensity = scaleIntensityByErrorCount(errorCount, cfg.intensity, cfg.maxIntensity);
+      finalDurationMs = scaleDurationByErrorCount(errorCount, cfg.durationMs, cfg.maxDurationMs);
     } else {
       finalIntensity = cfg.intensity;
       finalDurationMs = cfg.durationMs;
@@ -176,31 +190,46 @@ function activate(context) {
     sidebar.update();
   }
 
+  function schedulePunishmentCheck() {
+    if (punishCheckTimer) clearTimeout(punishCheckTimer);
+    // Give the language service / build task time to publish diagnostics.
+    punishCheckTimer = setTimeout(() => {
+      punishCheckTimer = null;
+      checkAndPunish().catch((error) => {
+        console.error("[Coyote Punisher] 自动触发失败:", error);
+      });
+    }, 500);
+  }
+
+  function isBuildTask(task) {
+    if (task.group && task.group.id === "build") return true;
+    const label = String(task.name || task.definition?.label || "");
+    return /\b(build|compile|tsc|webpack|vite)\b/i.test(label);
+  }
+
   context.subscriptions.push(
     vscode.languages.onDidChangeDiagnostics(() => {
       const errorCount = getErrorCount();
       sidebar.setErrorCount(errorCount);
-      checkAndPunish();
     }),
   );
 
   context.subscriptions.push(
     vscode.workspace.onDidSaveTextDocument(() => {
-      setTimeout(() => { checkAndPunish(); }, 500);
+      schedulePunishmentCheck();
     }),
   );
 
   context.subscriptions.push(
-    vscode.tasks.onDidEndTaskProcess((event) => {
-      if (event.exitCode !== 0) {
-        setTimeout(() => { checkAndPunish(); }, 500);
-      }
+    vscode.tasks.onDidStartTask((event) => {
+      if (isBuildTask(event.execution.task)) schedulePunishmentCheck();
     }),
   );
 
   context.subscriptions.push({
     dispose() {
       if (cooldownTimer) { clearInterval(cooldownTimer); cooldownTimer = null; }
+      if (punishCheckTimer) { clearTimeout(punishCheckTimer); punishCheckTimer = null; }
       controller.dispose();
     },
   });

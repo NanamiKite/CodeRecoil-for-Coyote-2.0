@@ -425,13 +425,13 @@ button:disabled { opacity: 0.5; cursor: default; }
 
 <div class="card">
 <div class="title">惩罚配置</div>
-<div class="toggle-row"><label><input type="checkbox" id="autoTrigger"> 自动触发（保存/编译出错时）</label></div>
+<div class="toggle-row"><label><input type="checkbox" id="autoTrigger"> 自动触发（保存 / 启动编译时）</label></div>
 <div class="row"><span>触发强度</span><input id="punishIntensity" type="number" min="0" max="200" value="50"></div>
 <div class="row"><span>强度上限</span><input id="punishMaxIntensity" type="number" min="0" max="200" value="200"></div>
 <div class="row"><span>触发时长 (ms)</span><input id="punishDuration" type="number" min="100" max="30000" step="100" value="1000"></div>
 <div class="row"><span>时长上限 (ms)</span><input id="punishMaxDuration" type="number" min="100" max="30000" step="100" value="5000"></div>
 <div class="row"><span>冷却时间 (s)</span><input id="punishCooldown" type="number" min="0" max="3600" value="15"></div>
-<div class="toggle-row"><label><input type="checkbox" id="scaleByErrors" checked> 按错误数递增（1 个=基础，10 个=上限）</label></div>
+<div class="toggle-row"><label><input type="checkbox" id="scaleByErrors" checked> 按错误数递增强度（对数-幂律，100 个=上限）</label></div>
 <div class="row"><span>惩罚波形</span></div>
 <select id="punishWaveform">
 <option value="frequencySweep">频率递增</option>
