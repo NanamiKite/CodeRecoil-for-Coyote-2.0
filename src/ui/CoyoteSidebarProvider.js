@@ -24,6 +24,7 @@ class CoyoteSidebarProvider {
       maxDurationMs: 5000,
       cooldown: 15,
       scaleByErrors: true,
+      errorMapping: "composite",
       waveformName: "frequencySweep",
     };
     this.cooldownRemaining = 0;
@@ -47,6 +48,7 @@ class CoyoteSidebarProvider {
       maxDurationMs: this.punishConfig.maxDurationMs,
       cooldown: this.punishConfig.cooldown,
       scaleByErrors: this.punishConfig.scaleByErrors,
+      errorMapping: this.punishConfig.errorMapping,
       waveformName: this.punishConfig.waveformName,
       waveformData: safeData.length > 0 ? safeData : null,
     };
@@ -122,6 +124,7 @@ class CoyoteSidebarProvider {
             self.punishConfig.maxDurationMs = Math.max(100, Math.min(30000, Math.round(Number(message.maxDurationMs) || 5000)));
             self.punishConfig.cooldown = Math.max(0, Math.min(3600, Math.round(Number(message.cooldown) || 15)));
             self.punishConfig.scaleByErrors = !!message.scaleByErrors;
+            self.punishConfig.errorMapping = message.errorMapping === "stepped" ? "stepped" : "composite";
             self.punishConfig.waveformName = String(message.waveformName || "frequencySweep");
             console.log("[Coyote UI] 惩罚配置已更新:", self.punishConfig); break;
           default: console.warn("Unknown Coyote UI command:", message.command);
@@ -432,6 +435,12 @@ button:disabled { opacity: 0.5; cursor: default; }
 <div class="row"><span>时长上限 (ms)</span><input id="punishMaxDuration" type="number" min="100" max="30000" step="100" value="5000"></div>
 <div class="row"><span>冷却时间 (s)</span><input id="punishCooldown" type="number" min="0" max="3600" value="15"></div>
 <div class="toggle-row"><label><input type="checkbox" id="scaleByErrors" checked> 按错误数递增强度（对数-幂律，100 个=上限）</label></div>
+<div class="row"><span>错误映射模式</span></div>
+<select id="errorMapping">
+<option value="composite">对数-幂律（连续）</option>
+<option value="stepped">多阶段状态转移（1–3 / 4–15 / 16+）</option>
+</select>
+<div class="hint">阶跃模式：1–3 提醒、4–15 警示、16+ 惩罚；0 个错误不会自动输出。</div>
 <div class="row"><span>惩罚波形</span></div>
 <select id="punishWaveform">
 <option value="frequencySweep">频率递增</option>
@@ -533,6 +542,7 @@ function syncPunishConfig() {
     maxDurationMs: Number(document.getElementById("punishMaxDuration").value) || 5000,
     cooldown: Number(document.getElementById("punishCooldown").value) || 15,
     scaleByErrors: document.getElementById("scaleByErrors").checked,
+    errorMapping: document.getElementById("errorMapping").value,
     waveformName: document.getElementById("punishWaveform").value
   });
 }
@@ -565,6 +575,7 @@ document.getElementById("punishDuration").addEventListener("change", syncPunishC
 document.getElementById("punishMaxDuration").addEventListener("change", syncPunishConfig);
 document.getElementById("punishCooldown").addEventListener("change", syncPunishConfig);
 document.getElementById("scaleByErrors").addEventListener("change", syncPunishConfig);
+document.getElementById("errorMapping").addEventListener("change", syncPunishConfig);
 document.getElementById("punishWaveform").addEventListener("change", syncPunishConfig);
 
 window.addEventListener("message", function(event) {
@@ -610,6 +621,7 @@ window.addEventListener("message", function(event) {
     document.getElementById("punishMaxDuration").value = s.punishConfig.maxDurationMs;
     document.getElementById("punishCooldown").value = s.punishConfig.cooldown;
     document.getElementById("scaleByErrors").checked = !!s.punishConfig.scaleByErrors;
+    document.getElementById("errorMapping").value = s.punishConfig.errorMapping || "composite";
     document.getElementById("punishWaveform").value = s.punishConfig.waveformName || "frequencySweep";
   }
 });
