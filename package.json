@@ -1,7 +1,7 @@
 {
   "name": "coyote-2-code-punisher",
-  "displayName": "Coyote 2.0 Code Punisher",
-  "description": "Coyote 2.0 VS Code game feedback controller",
+  "displayName": "Coyote V2/V3 Code Punisher",
+  "description": "Coyote V2/V3 VS Code game feedback controller",
   "version": "0.1.0",
   "publisher": "nanami",
   "license": "MIT",
@@ -65,12 +65,12 @@
         {
           "type": "webview",
           "id": "coyotePunisher.sidebar",
-          "name": "Coyote 2.0"
+          "name": "Coyote V2/V3"
         }
       ]
     },
     "configuration": {
-      "title": "Coyote 2.0 Code Punisher",
+      "title": "Coyote V2/V3 Code Punisher",
       "properties": {
         "coyotePunisher.maxIntensity": {
           "type": "number",

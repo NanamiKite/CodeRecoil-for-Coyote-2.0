@@ -1,6 +1,7 @@
 const webbluetooth = require("webbluetooth");
 const { EventEmitter } = require("events");
 const { CoyoteProtocol } = require("./CoyoteProtocol");
+const { CoyoteProtocolV3, OFF } = require("./CoyoteProtocolV3");
 const { CoyoteSafety } = require("./CoyoteSafety");
 
 const BATTERY_SERVICE = "955a180a-0fe2-f5aa-a094-84b8d4f3e8ad";
@@ -9,6 +10,12 @@ const BATTERY_LEVEL = "955a1500-0fe2-f5aa-a094-84b8d4f3e8ad";
 const PWM_AB2 = "955a1504-0fe2-f5aa-a094-84b8d4f3e8ad";
 const PWM_A34 = "955a1505-0fe2-f5aa-a094-84b8d4f3e8ad";
 const PWM_B34 = "955a1506-0fe2-f5aa-a094-84b8d4f3e8ad";
+const V3_BASE = "-0000-1000-8000-00805f9b34fb";
+const V3_BATTERY_SERVICE = "0000180a" + V3_BASE;
+const V3_CONTROL_SERVICE = "0000180c" + V3_BASE;
+const V3_BATTERY_LEVEL = "00001500" + V3_BASE;
+const V3_WRITE = "0000150a" + V3_BASE;
+const V3_NOTIFY = "0000150b" + V3_BASE;
 
 class CoyoteController extends EventEmitter {
   constructor() {
@@ -23,6 +30,11 @@ class CoyoteController extends EventEmitter {
     this.pwmAB2 = null;
     this.pwmA34 = null;
     this.pwmB34 = null;
+    this.version = null;
+    this.v3Write = null;
+    this.v3Notify = null;
+    this.v3Waves = { a: OFF, b: OFF };
+    this.v3ReportedIntensity = null;
 
     this.connected = false;
     this.connecting = false;
@@ -71,7 +83,7 @@ class CoyoteController extends EventEmitter {
       await this._connect();
       if (!this.server?.connected) throw new Error("初始化期间蓝牙连接已断开");
       this.connected = true;
-      this._connectionStatus("connected", "已连接 " + (this.device.name || "Coyote 2.0"));
+      this._connectionStatus("connected", "已连接 " + (this.device.name || `Coyote ${this.version}.0`));
     } catch (error) {
       const stage = this.connection.message;
       const detail = error?.message || String(error);
@@ -90,20 +102,21 @@ class CoyoteController extends EventEmitter {
   }
 
   async _connect() {
-    this._connectionStatus("connecting", "正在搜索 D-LAB 设备");
+    this._connectionStatus("connecting", "正在搜索郊狼 V2 / V3 主机");
 
-    console.log("Requesting Coyote 2.0...");
+    console.log("Requesting Coyote V2 / V3...");
 
     this.device = await webbluetooth.bluetooth.requestDevice({
       filters: [
-        {
-          namePrefix: "D-LAB",
-        },
+        { namePrefix: "D-LAB" },
+        { namePrefix: "47L121" },
       ],
-      optionalServices: [BATTERY_SERVICE, CONTROL_SERVICE],
+      optionalServices: [BATTERY_SERVICE, CONTROL_SERVICE, V3_BATTERY_SERVICE, V3_CONTROL_SERVICE],
     });
 
     console.log(`Device: ${this.device.name}`);
+    this.version = this.device.name?.startsWith("47L121") ? 3 : this.device.name?.startsWith("D-LAB") ? 2 : null;
+    if (!this.version) throw new Error("只支持郊狼 V2 / V3 主机，不支持无线传感器");
 
     if (!this.device.gatt) {
       throw new Error("设备不支持 GATT");
@@ -115,6 +128,50 @@ class CoyoteController extends EventEmitter {
     this.server = await this.device.gatt.connect();
 
     console.log("GATT connected.");
+
+    if (this.version === 3) await this._connectV3();
+    else await this._connectV2();
+
+    const connectedDevice = this.device;
+    this._onDisconnected = () => {
+      if (this.device !== connectedDevice) return;
+      connectedDevice.removeEventListener("gattserverdisconnected", this._onDisconnected);
+      this._onDisconnected = null;
+      this._removeIntensityListener();
+      console.log("[Coyote] 设备已断开连接 (gattserverdisconnected)");
+      this._clearAllTimers();
+      this.connected = false;
+      this.active = false;
+      this.channelA = 0;
+      this.channelB = 0;
+      this.lastIntensityRaw = "--";
+      this.battery = null;
+      this.v3Waves = { a: OFF, b: OFF };
+      this.v3ReportedIntensity = null;
+      this._connectionStatus("disconnected", "设备连接已断开，请检查设备电源和距离后重新连接");
+      this.emit("intensityChanged");
+    };
+    this.device.addEventListener("gattserverdisconnected", this._onDisconnected);
+
+    if (this.version === 3) {
+      this._connectionStatus("connecting", "正在订阅 V3 B1 强度通知");
+      await this._subscribeIntensity();
+      this._connectionStatus("connecting", "正在写入 V3 软上限 200 与平衡参数 128");
+      await this.writeCharacteristic(this.v3Write, CoyoteProtocolV3.encodeBF());
+      // Do not leave a pre-existing device output active on connection.
+      this._connectionStatus("connecting", "正在归零 V3 两通道输出");
+      await this._writeV3({ methodA: 3, methodB: 3, intensityA: 0, intensityB: 0 });
+    }
+    this._connectionStatus("connecting", "正在读取设备电量");
+    await this.readBattery();
+    if (this.version === 2) {
+      this._connectionStatus("connecting", "正在订阅强度通知");
+      await this._subscribeIntensity();
+    }
+    console.log(`Coyote V${this.version} GATT services found.`);
+  }
+
+  async _connectV2() {
 
     this._connectionStatus("connecting", "正在读取电量服务");
     const batteryService = await this.server.getPrimaryService(BATTERY_SERVICE);
@@ -156,34 +213,19 @@ class CoyoteController extends EventEmitter {
     console.log("PWM_A34 properties:", this.pwmA34.properties);
     console.log("PWM_B34 properties:", this.pwmB34.properties);
 
-    /*
-     * 监听设备断开连接事件，
-     * 防止断开后 this.connected 仍为 true。
-     */
-    this._onDisconnected = () => {
-      this._removeIntensityListener();
-      console.log("[Coyote] 设备已断开连接 (gattserverdisconnected)");
-      this._clearAllTimers();
-      this.connected = false;
-      this.active = false;
-      this.channelA = 0;
-      this.channelB = 0;
-      this.lastIntensityRaw = "--";
-      this.battery = null;
-      this._connectionStatus("disconnected", "设备连接已断开，请检查设备电源和距离后重新连接");
-      this.emit("intensityChanged");
-    };
-    this.device.addEventListener("gattserverdisconnected", this._onDisconnected);
+  }
 
-    /*
-     * 先读取电量。
-     */
-    this._connectionStatus("connecting", "正在读取设备电量");
-    await this.readBattery();
-    this._connectionStatus("connecting", "正在订阅强度通知");
-    await this._subscribeIntensity();
-
-    console.log("Coyote GATT services found.");
+  async _connectV3() {
+    this._connectionStatus("connecting", "正在读取 V3 电量服务");
+    const batteryService = await this.server.getPrimaryService(V3_BATTERY_SERVICE);
+    this._connectionStatus("connecting", "正在读取 V3 控制服务");
+    const controlService = await this.server.getPrimaryService(V3_CONTROL_SERVICE);
+    this._connectionStatus("connecting", "正在读取 V3 读写特性");
+    this.batteryCharacteristic = await batteryService.getCharacteristic(V3_BATTERY_LEVEL);
+    const characteristics = await controlService.getCharacteristics();
+    this.v3Write = characteristics.find(c => c.uuid.toLowerCase() === V3_WRITE);
+    this.v3Notify = characteristics.find(c => c.uuid.toLowerCase() === V3_NOTIFY);
+    if (!this.v3Write || !this.v3Notify) throw new Error("找不到 V3 WRITE (150A) 或 NOTIFY (150B)");
   }
 
   async readBattery() {
@@ -276,6 +318,16 @@ class CoyoteController extends EventEmitter {
 
     a = this.safety.intensity(a);
     b = this.safety.intensity(b);
+    if (this.version === 3) {
+      await this._writeV3({ methodA: 3, methodB: 3, intensityA: a, intensityB: b });
+      this.channelA = a;
+      this.channelB = b;
+      this.active = a > 0 || b > 0;
+      this.intensitySource = "write";
+      this.intensityUpdatedAt = Date.now();
+      this.emit("intensityChanged");
+      return;
+    }
 
     const protocolA = a * 7;
     const protocolB = b * 7;
@@ -460,6 +512,11 @@ class CoyoteController extends EventEmitter {
       throw new Error("Coyote 未连接");
     }
 
+    if (this.version === 3) {
+      // V3 exposes intensity through B1 notifications, not a readable characteristic.
+      if (!this.v3ReportedIntensity || this.intensitySource !== "notification") throw new Error("V3 不支持主动读取强度；请等待 B1 设备通知");
+      return { ...this.v3ReportedIntensity };
+    }
     if (!this.pwmAB2) {
       throw new Error("PWM_AB2 未初始化");
     }
@@ -512,6 +569,30 @@ class CoyoteController extends EventEmitter {
 
   async _subscribeIntensity() {
     this._removeIntensityListener();
+    if (this.version === 3) {
+      const characteristic = this.v3Notify;
+      if (!characteristic || typeof characteristic.startNotifications !== "function") throw new Error("V3 强度通知不可用");
+      this._intensityCharacteristic = characteristic;
+      this._onIntensityChanged = event => {
+        if (!this.connected) return;
+        try {
+          const result = CoyoteProtocolV3.decodeB1(event.target.value);
+          this.channelA = result.a;
+          this.channelB = result.b;
+          this.v3ReportedIntensity = { a: result.a, b: result.b };
+          this.active = result.a > 0 || result.b > 0;
+          this.lastIntensityRaw = Array.from(new Uint8Array(event.target.value.buffer, event.target.value.byteOffset, event.target.value.byteLength))
+            .map(x => x.toString(16).padStart(2,"0").toUpperCase()).join(" ");
+          this.intensitySource = "notification";
+          this.intensityUpdatedAt = Date.now();
+          this.emit("intensityChanged");
+        } catch (e) { console.warn("Invalid V3 B1 notification:", e.message); }
+      };
+      characteristic.addEventListener("characteristicvaluechanged", this._onIntensityChanged);
+      try { await characteristic.startNotifications(); }
+      catch (e) { this._removeIntensityListener(); throw e; }
+      return;
+    }
     const characteristic = this.pwmAB2;
     if (!characteristic?.properties?.notify || typeof characteristic.startNotifications !== "function") return;
     this._intensityCharacteristic = characteristic;
@@ -542,6 +623,11 @@ class CoyoteController extends EventEmitter {
     }
 
     const parsed = this._parseWaveformArgs(x, y, z);
+    if (this.version === 3) {
+      this.v3Waves.a = this._v3RepeatedFrame(parsed);
+      await this._writeV3();
+      return;
+    }
     const data = this.protocol.encodeWaveformA(parsed.x, parsed.y, parsed.z);
 
     // The V2 table assigns 1506 (PWM_B34) to the physical A output.
@@ -555,6 +641,11 @@ class CoyoteController extends EventEmitter {
     }
 
     const parsed = this._parseWaveformArgs(x, y, z);
+    if (this.version === 3) {
+      this.v3Waves.b = this._v3RepeatedFrame(parsed);
+      await this._writeV3();
+      return;
+    }
     const data = this.protocol.encodeWaveformB(parsed.x, parsed.y, parsed.z);
 
     // The V2 table assigns 1505 (PWM_A34) to the physical B output.
@@ -567,6 +658,41 @@ class CoyoteController extends EventEmitter {
    */
   async setWaveform(x, y, z) {
     await this.setWaveformA(x, y, z);
+  }
+
+  _v3RepeatedFrame(frame) {
+    if (frame.x === 0 && frame.y === 0 && frame.z === 0) return OFF;
+    const { frequency, strength } = CoyoteProtocolV3.fromV2Frame([frame.x, frame.y, frame.z]);
+    return { frequency: [frequency,frequency,frequency,frequency], strength: [strength,strength,strength,strength] };
+  }
+
+  async setWaveformWindow(framesA, framesB) {
+    if (!this.connected || this.version !== 3) throw new Error("V3 主机未连接");
+    const encode = frames => {
+      if (!frames) return OFF;
+      if (!Array.isArray(frames) || frames.length !== 4) throw new Error("V3 每个通道需要 4 帧");
+      const samples = frames.map(frame => CoyoteProtocolV3.fromV2Frame(frame));
+      return { frequency: samples.map(sample => sample.frequency), strength: samples.map(sample => sample.strength) };
+    };
+    this.v3Waves = { a: encode(framesA), b: encode(framesB) };
+    await this._writeV3();
+  }
+
+  async clearWaveforms() {
+    if (!this.connected) return;
+    if (this.version === 3) {
+      this.v3Waves = { a: OFF, b: OFF };
+      await this._writeV3();
+    } else {
+      await this.setWaveformA(0,0,0);
+      await this.setWaveformB(0,0,0);
+    }
+  }
+
+  async _writeV3(options = {}) {
+    const data = CoyoteProtocolV3.encodeB0({ ...options, a: this.v3Waves.a, b: this.v3Waves.b });
+    await this.writeCharacteristic(this.v3Write, data);
+    this.lastIntensityRaw = Array.from(data).map(x => x.toString(16).padStart(2,"0").toUpperCase()).join(" ");
   }
 
   /**
@@ -641,6 +767,9 @@ class CoyoteController extends EventEmitter {
       return;
     }
 
+    if (this.version === 3) {
+      this.v3Waves = { a: OFF, b: OFF };
+    }
     await this.setIntensity(0, 0);
 
     this.active = false;
@@ -672,6 +801,11 @@ class CoyoteController extends EventEmitter {
       this.pwmAB2 = null;
       this.pwmA34 = null;
       this.pwmB34 = null;
+      this.v3Write = null;
+      this.v3Notify = null;
+      this.v3Waves = { a: OFF, b: OFF };
+      this.v3ReportedIntensity = null;
+      this.version = null;
 
       this.connected = false;
 

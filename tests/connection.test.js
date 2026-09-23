@@ -5,6 +5,7 @@ const vm = require("node:vm");
 const fs = require("node:fs");
 const { EventEmitter } = require("node:events");
 const { CoyoteProtocol } = require("../src/coyote/CoyoteProtocol");
+const { CoyoteProtocolV3, OFF } = require("../src/coyote/CoyoteProtocolV3");
 const { CoyoteSafety } = require("../src/coyote/CoyoteSafety");
 
 function fixture() {
@@ -33,6 +34,7 @@ function fixture() {
       if (name === "webbluetooth") return { bluetooth };
       if (name === "events") return { EventEmitter };
       if (name === "./CoyoteProtocol") return { CoyoteProtocol };
+      if (name === "./CoyoteProtocolV3") return { CoyoteProtocolV3, OFF };
       if (name === "./CoyoteSafety") return { CoyoteSafety };
       throw new Error(name);
     },
@@ -98,7 +100,7 @@ test("failed initialization keeps the failing stage and raw error, cleans GATT a
 test("scan rejection strings and missing control characteristics remain visible", async () => {
   const { controller: c, bluetooth, device, characteristics } = fixture();
   bluetooth.requestDevice = async () => { throw "requestDevice error: no devices found"; };
-  await assert.rejects(c.connect(), /正在搜索 D-LAB 设备失败.*no devices found/);
+  await assert.rejects(c.connect(), /正在搜索郊狼 V2 \/ V3 主机失败.*no devices found/);
   assert.equal(c.connection.error, "requestDevice error: no devices found");
   bluetooth.requestDevice = async () => device;
   characteristics.pop();

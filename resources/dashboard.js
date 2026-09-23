@@ -186,15 +186,17 @@ function render(s) {
   const failed = s.connection?.state === "error";
   const elapsed = connecting ? Math.max(0, Math.floor((Date.now() - (s.connection?.startedAt || Date.now())) / 1000)) : 0;
   $("connection").textContent = connecting ? "◌ 连接中" : s.connected ? "● 已连接" : failed ? "! 连接失败" : "○ 未连接";
+  $("protocolVersion").textContent = s.version ? "COYOTE / V" + s.version : "COYOTE / V2 · V3";
   $("connectionStatus").dataset.state = connecting ? "connecting" : s.connection?.state || "idle";
   $("connectionMessage").textContent = (s.connection?.message || (s.connected ? "设备已连接" : "尚未连接设备")) + (connecting ? " · 已等待 " + elapsed + " 秒" : "");
   $("connectionError").hidden = !s.connection?.error;
   $("connectionError").textContent = s.connection?.error || "";
-  $("connectionHint").hidden = !connecting && !failed;
+  $("connectionHint").hidden = !connecting && !failed && !(s.connected && s.version === 3);
   $("connectionHint").textContent = failed
     ? "请检查电脑蓝牙、设备电源与距离，以及设备是否被手机 App 或其他程序占用，然后点击重试。"
     : elapsed >= 15 ? "连接仍在等待蓝牙响应。请检查设备电源、电脑蓝牙，以及是否有其他程序占用设备。"
-    : "请保持设备开机并靠近电脑；如出现设备选择窗口，请完成选择。";
+    : connecting ? "请保持设备开机并靠近电脑；如出现设备选择窗口，请完成选择。"
+    : "V3 已写入持久化设备参数：A/B 强度软上限 200，频率和强度平衡参数均为 128。";
   $("device").textContent = s.deviceName || "等待设备";
   $("battery").textContent = "电量 " + (s.battery == null ? "—" : s.battery+"%");
   $("channelA").textContent = s.channelA; $("channelB").textContent = s.channelB;
@@ -203,11 +205,14 @@ function render(s) {
   $("connect").setAttribute("aria-busy", String(connecting));
   $("disconnect").disabled = !s.connected || connecting;
   $("batteryRead").disabled = !s.connected;
-  $("readIntensity").disabled = !s.connected;
+  const canReadIntensity = s.connected && (s.version !== 3 || s.hasDeviceIntensity);
+  $("readIntensity").disabled = !canReadIntensity;
+  $("readIntensity").textContent = s.version === 3 ? "使用最近 B1 回报的 A/B 强度" : "从设备读取 A/B 强度";
   const sceneBusy = !!s.running && s.running.mode !== "manual";
   $("manual").disabled = !s.connected || !!s.running;
   $("setManualIntensity").disabled = !s.connected || sceneBusy;
-  $("manualRead").disabled = !s.connected;
+  $("manualRead").disabled = !canReadIntensity;
+  $("manualRead").textContent = s.version === 3 ? "使用最近 B1 回报" : "从设备读取";
   $("manualChannel").disabled = sceneBusy;
   $("stopManual").disabled = s.running?.mode !== "manual";
   if (!s.connected || sceneBusy) clearTimeout(manualTimer);

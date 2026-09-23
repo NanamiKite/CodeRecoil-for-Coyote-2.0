@@ -162,5 +162,13 @@ test("offline preview, rule drafts, preset and AI scene interactions", async ({ 
   await page.locator("#stop").click();
   await expect(page.locator("#channelA")).toHaveText("0");
   await expect(page.locator("#channelB")).toHaveText("0");
+  state.version=3;state.hasDeviceIntensity=false;
+  await post({command:"state",state});
+  await expect(page.locator("#protocolVersion")).toHaveText("COYOTE / V3");
+  await expect(page.locator("#manualRead")).toBeDisabled();
+  state.hasDeviceIntensity=true;state.intensitySource="notification";
+  await post({command:"state",state});
+  await expect(page.locator("#manualRead")).toBeEnabled();
+  await expect(page.locator("#manualRead")).toHaveText("使用最近 B1 回报");
   expect(errors).toEqual([]);
 });

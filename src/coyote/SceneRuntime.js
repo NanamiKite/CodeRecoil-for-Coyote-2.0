@@ -94,8 +94,15 @@ class SceneRuntime extends EventEmitter {
       if (!this.running || this.running.mode !== "manual") return;
       this.running.channel = channel;
       // Clear the deselected output immediately; following frames read the live selection.
-      if (!channel.includes("A")) await this.controller.setWaveformA(0,0,0);
-      if (!channel.includes("B") && epoch === this.epoch) await this.controller.setWaveformB(0,0,0);
+      if (this.controller.version === 3) {
+        const elapsed = Math.max(0, Date.now() - (this.running.endsAt - this.running.durationMs));
+        const current = this.running.waveformData[Math.floor(elapsed / (this.running.waveformInterval || 100)) % this.running.waveformData.length];
+        const frames = [current,current,current,current];
+        await this.controller.setWaveformWindow(channel.includes("A") ? frames : null, channel.includes("B") ? frames : null);
+      } else {
+        if (!channel.includes("A")) await this.controller.setWaveformA(0,0,0);
+        if (!channel.includes("B") && epoch === this.epoch) await this.controller.setWaveformB(0,0,0);
+      }
       this.emit("change");
     });
   }
@@ -109,8 +116,11 @@ class SceneRuntime extends EventEmitter {
     this.running = null;
     await this.write(epoch, async () => {
       if (!this.controller.connected) return;
-      await this.controller.setWaveformA(0,0,0);
-      if (epoch === this.epoch) await this.controller.setWaveformB(0,0,0);
+      if (this.controller.version === 3) await this.controller.clearWaveforms();
+      else {
+        await this.controller.setWaveformA(0,0,0);
+        if (epoch === this.epoch) await this.controller.setWaveformB(0,0,0);
+      }
     });
     this.record(reason);
   }
@@ -157,18 +167,31 @@ class SceneRuntime extends EventEmitter {
       await this.write(epoch, () => this.controller.setIntensity(a, b));
       if (epoch !== this.epoch) return;
       let index = 0;
+      const v3 = this.controller.version === 3;
+      const sendInterval = v3 ? 100 : interval;
       const tick = async () => {
         if (epoch !== this.epoch || !this.running) return;
         if (!this.controller.connected || Date.now() >= started + durationMs) {
           await finish();
           return;
         }
-        index = Math.max(index, Math.floor((Date.now() - started) / interval));
-        const f = normalized[index++ % normalized.length];
+        index = Math.max(index, Math.floor((Date.now() - started) / sendInterval));
+        const windowStart = index++ * sendInterval;
         try {
-          await this.write(epoch, () => this.running?.channel.includes("A") && this.controller.setWaveformA(...f));
-          await this.write(epoch, () => this.running?.channel.includes("B") && this.controller.setWaveformB(...f));
-          if (epoch === this.epoch) this.timer = setTimeout(() => tick().catch(e => this.record(e.message)), Math.max(0, started + index * interval - Date.now()));
+          if (v3) {
+            const frames = [0,25,50,75].map(offset => normalized[Math.floor((windowStart + offset) / interval) % normalized.length]);
+            await this.write(epoch, () => this.controller.setWaveformWindow(
+              this.running?.channel.includes("A") ? frames : null,
+              this.running?.channel.includes("B") ? frames : null));
+          } else {
+            const f = normalized[Math.floor(windowStart / interval) % normalized.length];
+            await this.write(epoch, () => this.running?.channel.includes("A") && this.controller.setWaveformA(...f));
+            await this.write(epoch, () => this.running?.channel.includes("B") && this.controller.setWaveformB(...f));
+          }
+          if (epoch === this.epoch) {
+            if (v3) index = Math.max(index, Math.floor((Date.now() - started) / sendInterval) + 1);
+            this.timer = setTimeout(() => tick().catch(e => this.record(e.message)), Math.max(0, started + index * sendInterval - Date.now()));
+          }
         } catch (e) {
           await this.stop("波形发送失败：" + e.message).catch(error => this.record("归零失败：" + error.message));
           throw e;

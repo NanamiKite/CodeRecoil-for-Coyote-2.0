@@ -37,10 +37,11 @@ class CoyoteSidebarProvider {
   status() {
     const c = this.controller, r = this.runtime;
     return {
-      connected: c.connected, battery: c.battery, deviceName: c.device?.name || "",
+      connected: c.connected, battery: c.battery, deviceName: c.device?.name || "", version: c.version,
       connecting: c.connecting, connection: c.connection,
       channelA: c.channelA, channelB: c.channelB, errorCount: this.errorCount,
       manual: this.manual, intensitySource:c.intensitySource, intensityUpdatedAt:c.intensityUpdatedAt,
+      hasDeviceIntensity: c.intensitySource === "notification",
       controlEpoch:r.epoch,
       previousErrors: this.previousErrors, streak: this.streak,
       config: r.config, running: r.running, pending: r.pending, lastProposal: r.lastProposal,

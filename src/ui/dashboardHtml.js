@@ -5,7 +5,7 @@ function dashboardHtml(csp, nonce, css, js) {
 <meta http-equiv="Content-Security-Policy" content="default-src 'none'; style-src ${csp}; script-src 'nonce-${nonce}';">
 <link rel="stylesheet" href="${css}"><title>Coyote 控制台</title></head><body>
 <header>
-<div class="brand"><div><span class="eyebrow">COYOTE / 2.0</span></div><span id="connection" class="badge">未连接</span></div>
+<div class="brand"><div><span id="protocolVersion" class="eyebrow">COYOTE / V2 · V3</span></div><span id="connection" class="badge">未连接</span></div>
 <div class="device-line"><span id="device">等待设备</span><span id="battery">电量 —</span></div>
 <div class="channels"><div><span>A 通道</span><strong id="channelA">0</strong></div><div><span>B 通道</span><strong id="channelB">0</strong></div></div>
 <div class="actions"><button id="connect">连接设备</button><button id="stop" class="danger">■ 停止全部</button></div>
