@@ -4,9 +4,10 @@ const { randomBytes, timingSafeEqual } = require("crypto");
 const { scenes, scenePlan } = require("../coyote/rules");
 
 class LocalBridge {
-  constructor(runtime, status) {
+  constructor(runtime, status, challenge) {
     this.runtime = runtime;
     this.status = status;
+    this.challenge = challenge;
     this.server = null;
     this.port = null;
     this.token = null;
@@ -38,6 +39,7 @@ class LocalBridge {
           if (!args || typeof args !== "object" || Array.isArray(args)) throw new Error("Invalid arguments");
           switch (name) {
             case "coyote_status": result = this.status(); break;
+            case "coyote_challenge_status": result = this.challenge?.status() || { active:false, stage:"idle" }; break;
             case "coyote_scene_list":
               result = scenes.map(s => ({ ...s, plan: scenePlan(s.id, this.runtime.config) })); break;
             case "coyote_scene_propose":

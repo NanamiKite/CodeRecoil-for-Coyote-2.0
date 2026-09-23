@@ -4,6 +4,7 @@ const assert = require("node:assert/strict");
 const vm = require("node:vm");
 const fs = require("node:fs");
 const { normalizeConfig, planErrors } = require("../src/coyote/rules");
+const { CodeChallenge } = require("../src/coyote/CodeChallenge");
 test("extension gates diagnostics, deduplicates saves and cancels delayed checks", async () => {
   const handlers={},commands={},jobs=new Map(),starts=[];
   let next=1,sidebar,runtime,items=[],now=10000;
@@ -25,7 +26,7 @@ test("extension gates diagnostics, deduplicates saves and cancels delayed checks
     async dispose(){}
   }
   class Sidebar {
-    constructor(ctx,c,r){sidebar=this;this.c=c;this.r=r;this.streak=0;}
+    constructor(ctx,c,r,b,challenge){sidebar=this;this.c=c;this.r=r;this.challenge=challenge;this.streak=0;}
     setErrorCount(count){this.count=count;}
     update(){}
     async handle(m){if(m.command==="stop"){this.r.config.autoTrigger=false;this.r.epoch++;}}
@@ -38,6 +39,7 @@ test("extension gates diagnostics, deduplicates saves and cancels delayed checks
       if(name==="vscode")return vscode;
       if(name.endsWith("/rules"))return {normalizeConfig,planErrors};
       if(name.endsWith("/CoyoteController"))return {CoyoteController:class{constructor(){this.connected=true;}dispose(){}}};
+      if(name.endsWith("/CodeChallenge"))return {CodeChallenge};
       if(name.endsWith("/SceneRuntime"))return {SceneRuntime:Runtime};
       if(name.endsWith("/CoyoteSidebarProvider"))return {CoyoteSidebarProvider:Sidebar};
       if(name.endsWith("/LocalBridge"))return {LocalBridge:class{async close(){}}};
@@ -100,5 +102,11 @@ test("extension gates diagnostics, deduplicates saves and cancels delayed checks
   handlers.save({uri});
   await commands["coyotePunisher.emergencyStop"]();await flush();
   assert.equal(starts.length,6);
+  sidebar.challenge.start("代码迷宫");
+  items=[];
+  handlers.save({uri});await flush();
+  assert.equal(sidebar.challenge.status().stage,"build");
+  handlers.taskEnd({execution:{task:{name:"build"}},exitCode:0});await flush();
+  assert.equal(sidebar.challenge.status().stage,"complete");
   for(const s of context.subscriptions)s.dispose?.();
 });

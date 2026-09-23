@@ -4,13 +4,16 @@ const { randomBytes } = require("crypto");
 const { waveforms } = require("../coyote/waveforms");
 const { normalizeConfig, planErrors } = require("../coyote/rules");
 const { dashboardHtml } = require("./dashboardHtml");
+const { mcpConfig } = require("../mcp/configs");
+const { defaultStory } = require("../coyote/CodeChallenge");
 
 class CoyoteSidebarProvider {
-  constructor(context, controller, runtime, bridge) {
+  constructor(context, controller, runtime, bridge, challenge) {
     this.context = context;
     this.controller = controller;
     this.runtime = runtime;
     this.bridge = bridge;
+    this.challenge = challenge;
     this.errorCount = 0;
     this.previousErrors = 0;
     this.streak = 0;
@@ -49,6 +52,7 @@ class CoyoteSidebarProvider {
       config: r.config, running: r.running, pending: r.pending, lastProposal: r.lastProposal,
       cooldownRemaining: Math.max(0, Math.ceil((r.cooldownUntil - Date.now()) / 1000)),
       events: r.events, raw: c.lastIntensityRaw, bridgeEnabled: !!this.bridge.server,
+      challenge: this.challenge?.status(),
       presets: Object.keys(this.presets),
     };
   }
@@ -172,20 +176,27 @@ class CoyoteSidebarProvider {
       case "copyMcp": {
         if (!this.bridge.server) throw new Error("请先开启 AI 接入");
         const entry = vscode.Uri.joinPath(this.context.extensionUri, "src", "mcp", "server.js").fsPath;
-        const config = [
-          "- id: mcp-coyote",
-          "  name: '@deepseek-ai/dsh-mcp-client'",
-          "  config:",
-          "    serverName: coyote",
-          "    transport: stdio",
-          "    command: node",
-          "    args: " + JSON.stringify([entry]),
-          "    env:",
-          "      COYOTE_BRIDGE_PORT: " + JSON.stringify(String(this.bridge.port)),
-          "      COYOTE_BRIDGE_TOKEN: " + JSON.stringify(this.bridge.token),
-        ].join("\n");
+        const config = mcpConfig(m.client || "harness", entry, this.bridge.port, this.bridge.token);
         await vscode.env.clipboard.writeText(config);
-        this.runtime.record("已复制 Harness 配置（含本次会话凭据，请勿公开）"); break;
+        this.runtime.record("已复制 " + ({codex:"Codex",claude:"Claude Code",harness:"Harness"}[m.client || "harness"]) + " MCP 配置（含本次会话凭据，请勿公开）"); break;
+      }
+      case "challengeStart":
+        if (!vscode.workspace.isTrusted) throw new Error("请先信任此工作区");
+        this.challenge.start(m.story || defaultStory);
+        this.runtime.record("代码闯关已开始；设备不会因闯关自动输出"); break;
+      case "challengeStop":
+        this.challenge.stop();
+        this.runtime.record("代码闯关已结束"); break;
+      case "copyChallengePrompt": {
+        const story = this.challenge.status().story;
+        const prompt = [
+          "你是我的写代码闯关主持人。场景设定：" + story,
+          "先调用 coyote_challenge_status 读取当前关卡；每次我保存或运行 VS Code 构建任务后再读取状态，依据实际关卡推进剧情，不编造通关结果。",
+          "可调用 coyote_status 和 coyote_scene_list 了解规则；若剧情需要反馈，只能通过 coyote_scene_propose 提案，并等待我在插件侧边栏点击应用。pending 不代表已输出。",
+          "我要求停止时立即调用 coyote_scene_stop。不要自行提高强度或延长时长。",
+        ].join("\n");
+        await vscode.env.clipboard.writeText(prompt);
+        this.runtime.record("已复制代码闯关主持词"); break;
       }
       case "approve": await this.runtime.approve(m.id); break;
       case "dismiss": this.runtime.dismiss(); this.runtime.record("已跳过 AI 场景"); break;

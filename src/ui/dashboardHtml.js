@@ -73,10 +73,16 @@ function dashboardHtml(csp, nonce, css, js) {
 <article><h2>保存为预设</h2><label>名称<input id="presetName" maxlength="40" placeholder="例如：专注调试"></label><button id="presetSave" class="secondary">保存当前表单为预设</button></article>
 </section>
 <section id="ai" role="tabpanel" aria-labelledby="tab-ai" hidden>
-<article><span class="eyebrow">SCENE DIRECTOR</span><h2>让对话选择节奏</h2><p>在 DeepSeek Harness 中对话，AI 提案会出现在这里。你可以应用、跳过，或随时停止。</p>
-<button id="bridgeToggle">开启 AI 接入</button><button id="copyMcp" class="secondary" disabled>复制 Harness 配置</button>
-<p class="small">本机连接。配置包含本次会话凭据，重新开启接入后需要重新复制。</p></article>
-<article id="proposalCard"><h2 id="proposalTitle">等待 AI 提案</h2><p id="proposalReason">开启接入并配置 Harness 后，可以说：“先看看设备状态，再建议一个节奏提醒场景。”</p><p id="proposalPlan" class="small"></p>
+<article><span class="eyebrow">SCENE DIRECTOR</span><h2>让 AI 主持剧情</h2><p>Codex、Claude Code（CC）或 DeepSeek Harness 都可通过同一个本地 MCP 接入；AI 提案仍需你在这里确认。</p>
+<button id="bridgeToggle">开启 AI 接入</button>
+<label>AI 客户端<select id="mcpClient"><option value="codex">VS Code Codex</option><option value="claude">Claude Code（CC）</option><option value="harness">DeepSeek Harness</option></select></label>
+<button id="copyMcp" class="secondary" disabled>复制 MCP 配置</button>
+<p class="small">将配置加入所选客户端的本地 MCP 设置。配置包含本次会话凭据，请勿提交到仓库；重启接入后需重新复制。</p></article>
+<article><h2>写代码闯关</h2><p class="small">借鉴 AI 主持互动剧情：保存无错误文件过第一关，成功完成 VS Code 构建任务过第二关。闯关本身不会启动设备。</p>
+<label>剧情设定<textarea id="challengeStory" maxlength="500" rows="4">你被困在故障代码迷宫。修复错误并保存，随后通过一次 VS Code 构建任务，才能打开出口。</textarea></label>
+<div class="actions"><button id="challengeStart">开始 / 重开闯关</button><button id="challengeStop" class="secondary">结束闯关</button></div>
+<p id="challengeStatus" role="status">尚未开始闯关</p><button id="copyChallengePrompt" class="secondary">复制 AI 主持词</button></article>
+<article id="proposalCard"><h2 id="proposalTitle">等待 AI 提案</h2><p id="proposalReason">开启接入后，让 AI 读取闯关状态、主持剧情，并按需提交节奏提醒提案。</p><p id="proposalPlan" class="small"></p>
 <div class="actions"><button id="approve" disabled>应用场景</button><button id="dismiss" class="secondary" disabled>跳过</button></div></article>
 <article><h2>对话进度</h2><p id="proposalStatus">暂无提案</p><p class="small">AI 可读取状态、列举场景、提交提案和停止输出。强度、时长与通道使用本地规则。</p></article>
 </section></main>

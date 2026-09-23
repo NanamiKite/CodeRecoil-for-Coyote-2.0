@@ -7,6 +7,7 @@ const http = require("http");
 const empty = { type: "object", properties: {}, additionalProperties: false };
 const tools = [
   { name: "coyote_status", description: "Read connection, local limits, running scene and proposal status. Does not activate hardware.", inputSchema: empty },
+  { name: "coyote_challenge_status", description: "Read the current code-challenge story, checkpoint, workspace error count and progress. Saving a clean file and passing a VS Code build task advance the challenge; this tool never activates hardware.", inputSchema: empty },
   { name: "coyote_scene_list", description: "List local scenes and their current bounded output plans.", inputSchema: empty },
   { name: "coyote_scene_propose", description: "Propose a scene with a conversational reason. Returns pending, NOT running. The user must apply it in the VS Code sidebar. Never claim output started from this result.", inputSchema: { type: "object", properties: { sceneId: { type: "string", enum: ["reminder","warning","mixed"] }, reason: { type: "string", minLength: 1, maxLength: 500 } }, required: ["sceneId","reason"], additionalProperties: false } },
   { name: "coyote_scene_stop", description: "Immediately cancel pending scenes and stop output.", inputSchema: empty },
@@ -41,7 +42,7 @@ function callBridge(name, args) {
 }
 function createServer() {
   const server = new Server({ name: "coyote-scenes", version: "0.2.0" }, { capabilities: { tools: {} },
-    instructions: "Use scene tools for contextual conversation. Check status and scene list first. Proposals require a local click; pending is never approval. Respect skipped/expired proposals. Stop immediately when asked. Do not infer sensations or medical effects from output parameters.",
+    instructions: "Use scene tools for contextual conversation. In code-challenge mode, read coyote_challenge_status and narrate the current checkpoint; do not invent progress. Check status and scene list before a proposal. Proposals require a local click; pending is never approval. Respect skipped/expired proposals. Stop immediately when asked. Never infer sensations or medical effects from output parameters.",
   });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));
   server.setRequestHandler(CallToolRequestSchema, async ({ params }) => {

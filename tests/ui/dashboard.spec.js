@@ -30,6 +30,14 @@ test("offline preview, rule drafts, preset and AI scene interactions", async ({ 
       await post({command:"configSaved",config:state.config});
       await post({command:"state",state});
     }
+    if(m.command==="challengeStart"){
+      state.challenge={active:true,stage:"repair",story:m.story,message:"第一关：修复工作区错误并保存文件"};
+      await post({command:"state",state});
+    }
+    if(m.command==="challengeStop"){
+      state.challenge={...state.challenge,active:false,message:"闯关已结束"};
+      await post({command:"state",state});
+    }
     if(m.command==="setManualIntensity"){
       state.channelA=m.a;state.channelB=m.b;state.intensitySource="write";
       await post({command:"state",state});
@@ -141,10 +149,20 @@ test("offline preview, rule drafts, preset and AI scene interactions", async ({ 
   await expect.poll(()=>sent.some(m=>m.command==="presetSave" && m.name==="专注")).toBe(true);
   expect(sent.some(m=>m.command==="manual")).toBe(false);
   await page.getByRole("tab",{name:"AI 场景",exact:true}).click();
+  await page.locator("#mcpClient").selectOption("codex");
+  await page.locator("#challengeStory").fill("代码迷宫");
+  await page.locator("#challengeStart").click();
+  await expect(page.locator("#challengeStatus")).toContainText("第一关");
+  await page.locator("#copyChallengePrompt").click();
+  await expect.poll(()=>sent.some(m=>m.command==="copyChallengePrompt")).toBe(true);
+  await page.locator("#challengeStop").click();
+  await expect(page.locator("#challengeStatus")).toContainText("已结束");
   state.connected=true;state.bridgeEnabled=true;
   state.connection={state:"connected",message:"已连接 D-LAB ESTIM01",error:""};
   state.pending={id:"test-proposal",plan:scenePlan("reminder",normalizeConfig()),reason:"<script>alert('x')</script> 建议先提醒",expiresAt:Date.now()+120000};
   await post({command:"state",state});
+  await page.locator("#copyMcp").click();
+  await expect.poll(()=>sent.some(m=>m.command==="copyMcp" && m.client==="codex")).toBe(true);
   await expect(page.locator("#proposalReason")).toHaveText(state.pending.reason);
   await page.locator("#approve").click();
   await expect.poll(()=>sent.some(m=>m.command==="approve"&&m.id==="test-proposal")).toBe(true);

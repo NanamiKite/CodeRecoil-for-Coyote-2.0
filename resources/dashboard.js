@@ -112,7 +112,10 @@ $("manualChannel").onchange = () => send("manualChannel", { channel:$("manualCha
 $("stopManual").onclick = () => { clearTimeout(manualTimer); send("stopManual"); };
 $("readIntensity").onclick = () => send("readIntensity");
 $("bridgeToggle").onclick = () => send("bridgeToggle");
-$("copyMcp").onclick = () => send("copyMcp");
+$("copyMcp").onclick = () => send("copyMcp", { client:$("mcpClient").value });
+$("challengeStart").onclick = () => send("challengeStart", { story:$("challengeStory").value });
+$("challengeStop").onclick = () => send("challengeStop");
+$("copyChallengePrompt").onclick = () => send("copyChallengePrompt");
 $("approve").onclick = () => send("approve", { id: proposalId });
 $("dismiss").onclick = () => send("dismiss");
 $("presetSave").onclick = () => send("presetSave", { name: $("presetName").value, config: form() });
@@ -240,7 +243,9 @@ function render(s) {
   $("copyMcp").disabled = !s.bridgeEnabled;
   proposalId = s.pending?.id;
   $("proposalTitle").textContent = s.pending?.plan.name || "等待 AI 提案";
-  $("proposalReason").textContent = s.pending?.reason || "在 Harness 中对话，AI 的场景建议会显示在这里。";
+  $("proposalReason").textContent = s.pending?.reason || "在 Codex、Claude Code 或 Harness 中对话，AI 的场景建议会显示在这里。";
+  $("challengeStatus").textContent = s.challenge?.message || "尚未开始闯关";
+  $("challengeStop").disabled = !s.challenge?.active;
   $("proposalPlan").textContent = s.pending ? s.pending.plan.channel+" 通道 · 强度 "+s.pending.plan.intensity+" · "+s.pending.plan.durationMs+"ms · "+Math.max(0,Math.ceil((s.pending.expiresAt-Date.now())/1000))+"s 内有效" : "";
   $("approve").disabled = !s.pending || !s.connected || !!s.running || s.cooldownRemaining>0;
   $("dismiss").disabled = !s.pending;

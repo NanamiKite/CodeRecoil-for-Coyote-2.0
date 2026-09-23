@@ -4,14 +4,17 @@ const { CoyoteController } = require("./coyote/CoyoteController");
 const { SceneRuntime } = require("./coyote/SceneRuntime");
 const { planErrors, normalizeConfig } = require("./coyote/rules");
 const { LocalBridge } = require("./mcp/LocalBridge");
+const { CodeChallenge } = require("./coyote/CodeChallenge");
 const { CoyoteSidebarProvider } = require("./ui/CoyoteSidebarProvider");
 let activeSession;
 function activate(context) {
   const controller = new CoyoteController();
   const runtime = new SceneRuntime(controller, { ...normalizeConfig(context.workspaceState.get("coyote.config", {})), autoTrigger: false });
+  const challenge = new CodeChallenge();
   let sidebar;
-  const bridge = new LocalBridge(runtime, () => sidebar.status());
-  sidebar = new CoyoteSidebarProvider(context, controller, runtime, bridge);
+  const bridge = new LocalBridge(runtime, () => sidebar.status(), challenge);
+  sidebar = new CoyoteSidebarProvider(context, controller, runtime, bridge, challenge);
+  challenge.on("change", () => sidebar.update());
   activeSession = { runtime, bridge, controller };
   context.subscriptions.push(sidebar, vscode.window.registerWebviewViewProvider("coyotePunisher.sidebar", sidebar));
   const command = (name, action) => context.subscriptions.push(vscode.commands.registerCommand("coyotePunisher." + name, async () => {
@@ -93,13 +96,17 @@ function activate(context) {
     lastTriggered = { fingerprint, at: Date.now() };
     autoStatus(source + "已输出：" + errors.length + " 个错误 · " + plan.channel + " 通道 · 强度 " + plan.intensity);
   }
-  function schedule(uri, source) {
+  function schedule(uri, source, buildSucceeded) {
     clearTimeout(timer);
     scheduledSource = source;
     const epoch = runtime.epoch;
     timer = setTimeout(() => {
       scheduledSource = undefined;
       if (epoch !== runtime.epoch || disposed) return;
+      if (challenge.state.active && (source === "保存" || source === "构建完成" || source === "构建失败")) {
+        challenge.observe(source === "保存" ? "save" : "build", diagnostics("workspace").length, buildSucceeded);
+      }
+      if (source === "构建完成") return;
       evaluate(uri, source).catch(e => {
         autoStatus(source + "失败：" + e.message);
         runtime.record("自动触发失败：" + e.message);
@@ -115,7 +122,9 @@ function activate(context) {
       if (scheduledSource === "保存") { clearTimeout(timer); scheduledSource = undefined; }
     }),
     vscode.tasks.onDidStartTask(event => { if (isBuild(event.execution.task)) schedule(undefined, "构建启动"); }),
-    vscode.tasks.onDidEndTaskProcess(event => { if (isBuild(event.execution.task) && event.exitCode !== 0) schedule(undefined, "构建失败"); }),
+    vscode.tasks.onDidEndTaskProcess(event => {
+      if (isBuild(event.execution.task)) schedule(undefined, event.exitCode === 0 ? "构建完成" : "构建失败", event.exitCode === 0);
+    }),
     { dispose() {
       disposed = true; clearTimeout(timer);
       bridge.close().catch(console.error);

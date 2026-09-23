@@ -24,7 +24,8 @@ article,.hero,details { padding:12px; border:1px solid var(--line); background:v
 .hero { border-top:2px solid var(--vscode-focusBorder); } .hero h2 { margin-top:5px; font-size:21px; }
 progress { width:100%; height:5px; accent-color:var(--vscode-focusBorder); }
 .metrics article { display:flex; flex-direction:column; } .metrics strong { font-size:28px; font-variant-numeric:tabular-nums; }
-label { display:block; margin:10px 0; font-size:12px; } input,select { display:block; width:100%; margin-top:5px; padding:6px; border:1px solid var(--vscode-input-border,var(--line)); border-radius:4px; background:var(--vscode-input-background); color:var(--vscode-input-foreground); font:inherit; }
+label { display:block; margin:10px 0; font-size:12px; } input,select,textarea { display:block; width:100%; margin-top:5px; padding:6px; border:1px solid var(--vscode-input-border,var(--line)); border-radius:4px; background:var(--vscode-input-background); color:var(--vscode-input-foreground); font:inherit; }
+textarea { resize:vertical; min-height:76px; }
 .check { display:flex; gap:7px; align-items:center; } .check input { width:auto; margin:0; accent-color:var(--vscode-focusBorder); }
 article > button { width:100%; margin-top:8px; }
 details > button { display:block; width:100%; margin-top:8px; }

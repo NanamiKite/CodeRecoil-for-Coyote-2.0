@@ -34,7 +34,7 @@ Coyote V2/V3 Code Punisher 会通过 BLE 控制兼容设备输出电脉冲，并
 - 固定、对数—幂律、多阶段阶跃映射，支持 A / B / AB 输出
 - 规则试算、自定义阶跃阈值、工作区预设保存与加载
 - 错误变化、连续无错检查记录、最近事件时间线
-- 本地 MCP 接入 DeepSeek Harness，AI 提案在侧边栏应用后执行
+- 本地 MCP 接入 Codex、Claude Code 或 DeepSeek Harness，支持写代码闯关；AI 提案在侧边栏应用后执行
 - 冷却倒计时实时显示在侧边栏
 - 紧急停止按钮 + 快捷键 Ctrl+Alt+S
 - 所有参数在侧边栏 UI 配置，不依赖 VS Code settings.json
@@ -121,7 +121,7 @@ V3 的强度仅通过 B1 通知回报，没有主动读取特性。插件写入�
 
 ## AI 场景接入与验证
 
-操作说明及 Harness 配置见 [AI 场景接入](docs/AI-scenes.md)。
+Codex、Claude Code（CC）与 DeepSeek Harness 的 MCP 配置，以及「写代码闯关」玩法，见 [AI 场景接入](docs/AI-scenes.md)。
 需要在设备所在电脑运行 VS Code 和 MCP 适配器；不需要在此插件中保存模型 API Key。
 
 ```sh

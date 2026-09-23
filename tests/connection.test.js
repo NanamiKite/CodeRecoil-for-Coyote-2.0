@@ -129,6 +129,7 @@ test("sidebar publishes connecting state immediately and forwards phases to VS C
   const sandbox = { module: { exports: {} }, setInterval, clearInterval, require(name) {
     if (name === "vscode") return vscode;
     if (name.startsWith("../coyote/")) return require("../src/coyote/" + name.split("/").at(-1));
+    if (name === "../mcp/configs") return require("../src/mcp/configs");
     if (name === "./dashboardHtml") return require("../src/ui/dashboardHtml");
     return require(name);
   } };

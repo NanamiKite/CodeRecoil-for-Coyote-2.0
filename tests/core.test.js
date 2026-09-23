@@ -150,16 +150,21 @@ test("proposals do not write; IDs, expiry, configuration and cooldown are enforc
 });
 test("official MCP client reaches authenticated bridge and proposal lifecycle", async t => {
   const c=controller(),r=new SceneRuntime(c,{cooldown:0});
-  const b=new LocalBridge(r,()=>({connected:c.connected,pending:r.pending,lastProposal:r.lastProposal}));
+  const { CodeChallenge } = require("../src/coyote/CodeChallenge");
+  const challenge=new CodeChallenge();
+  challenge.start("代码迷宫");
+  const b=new LocalBridge(r,()=>({connected:c.connected,pending:r.pending,lastProposal:r.lastProposal}),challenge);
   await b.start();
   const client=new Client({name:"coyote-test",version:"1.0.0"});
   const transport=new StdioClientTransport({command:process.execPath,args:[path.resolve("src/mcp/server.js")],
     env:{COYOTE_BRIDGE_PORT:String(b.port),COYOTE_BRIDGE_TOKEN:b.token},stderr:"pipe"});
   t.after(async()=>{ await client.close(); await b.close(); await r.dispose(); });
   await client.connect(transport);
-  assert.equal((await client.listTools()).tools.length,4);
+  assert.equal((await client.listTools()).tools.length,5);
   let result=await client.callTool({name:"coyote_status",arguments:{}});
   assert.equal(JSON.parse(result.content[0].text).connected,true);
+  result=await client.callTool({name:"coyote_challenge_status",arguments:{}});
+  assert.equal(JSON.parse(result.content[0].text).story,"代码迷宫");
   result=await client.callTool({name:"coyote_scene_list",arguments:{}});
   assert.equal(JSON.parse(result.content[0].text).length,3);
   result=await client.callTool({name:"coyote_scene_propose",arguments:{sceneId:"reminder",reason:"需要一次节奏提醒"}});
