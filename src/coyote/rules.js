@@ -5,7 +5,7 @@ const defaults = Object.freeze({
   autoTrigger: false, intensity: 50, maxIntensity: 200, durationMs: 1000,
   maxDurationMs: 5000, cooldown: 15, scaleByErrors: true, errorMapping: "composite",
   waveformName: "frequencySweep", channel: "A", reminderEnd: 3, warningEnd: 15,
-  scope: "workspace", onlyNew: false,
+  scope: "workspace", onlyNew: false, ignoreSameErrors: false,
 });
 function number(value, fallback, min, max) {
   if (value === "" || value == null || !Number.isFinite(Number(value))) return fallback;
@@ -24,6 +24,7 @@ function normalizeConfig(input = {}) {
     channel: ["A", "B", "AB"].includes(c.channel) ? c.channel : "A",
     reminderEnd, warningEnd: number(c.warningEnd, Math.max(15, reminderEnd + 1), reminderEnd + 1, 10000),
     scope: c.scope === "file" ? "file" : "workspace", onlyNew: c.onlyNew === true,
+    ignoreSameErrors: c.ignoreSameErrors === true,
   };
 }
 const scenes = [

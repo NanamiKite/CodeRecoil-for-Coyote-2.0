@@ -11,6 +11,7 @@ function dashboardHtml(csp, nonce, css, js) {
 <div class="actions"><button id="connect">连接设备</button><button id="stop" class="danger">■ 停止全部</button></div>
 <div id="connectionStatus" class="connection-status" role="status" aria-live="polite" aria-atomic="true"><span id="connectionMessage">尚未连接设备</span><p id="connectionError" hidden></p></div>
 <p id="connectionHint" class="small" hidden></p>
+<p id="autoStatus" class="small" role="status" aria-live="polite">自动触发已关闭</p>
 <p class="small">停止全部 · Ctrl+Alt+S</p>
 <nav role="tablist" aria-label="控制台页面">
 <button role="tab" aria-selected="true" aria-controls="overview" id="tab-overview" data-tab="overview">概览</button>
@@ -50,8 +51,11 @@ function dashboardHtml(csp, nonce, css, js) {
 <section id="rules" role="tabpanel" aria-labelledby="tab-rules" hidden>
 <article><h2>触发规则</h2>
 <label class="check"><input id="autoTrigger" type="checkbox">启用保存 / 构建自动触发</label>
+<p class="small">勾选后还需点击「保存规则」；构建仅监听 VS Code Task，不监听普通终端命令。</p>
 <label>统计范围<select id="scope"><option value="workspace">工作区</option><option value="file">当前文件 / 保存的文件</option></select></label>
 <label class="check"><input id="onlyNew" type="checkbox">只统计本次会话新增错误</label>
+<label class="check"><input id="ignoreSameErrors" type="checkbox">同一批错误只触发一次</label>
+<p class="small">开启后，错误集合变化或清零才允许再次触发；关闭时冷却结束后可再次触发。</p>
 <label>输出通道<select id="channel"><option>A</option><option>B</option><option value="AB">A + B</option></select></label>
 <label class="check"><input id="scaleByErrors" type="checkbox">随错误数调整</label>
 <label>映射方式<select id="errorMapping"><option value="composite">对数—幂律（100 个到上限）</option><option value="stepped">多阶段阶跃</option></select></label>

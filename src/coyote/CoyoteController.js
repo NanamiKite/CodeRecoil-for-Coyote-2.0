@@ -16,6 +16,9 @@ const V3_CONTROL_SERVICE = "0000180c" + V3_BASE;
 const V3_BATTERY_LEVEL = "00001500" + V3_BASE;
 const V3_WRITE = "0000150a" + V3_BASE;
 const V3_NOTIFY = "0000150b" + V3_BASE;
+const COYOTE_FILTERS = [{ namePrefix: "D-LAB ESTIM01" }, { namePrefix: "47L121000" }];
+const COYOTE_SERVICES = [BATTERY_SERVICE, CONTROL_SERVICE, V3_BATTERY_SERVICE, V3_CONTROL_SERVICE];
+const coyoteVersion = name => name?.startsWith("47L121000") ? 3 : name?.startsWith("D-LAB ESTIM01") ? 2 : null;
 
 class CoyoteController extends EventEmitter {
   constructor() {
@@ -38,6 +41,11 @@ class CoyoteController extends EventEmitter {
 
     this.connected = false;
     this.connecting = false;
+    this.scanning = false;
+    this.scanDurationMs = 5000;
+    this._scanCandidates = null;
+    this._scanRequest = null;
+    this._scanBluetooth = null;
     this.connection = { state: "idle", message: "尚未连接设备", error: "", startedAt: 0 };
 
     this.battery = null;
@@ -72,15 +80,66 @@ class CoyoteController extends EventEmitter {
     this._onDisconnected = null;
   }
 
-  async connect() {
+  async scanDevices() {
+    if (this.connected || this.connecting || this.scanning) throw new Error("设备正在连接或扫描中");
+    this.scanning = true;
+    this.connection.startedAt = Date.now();
+    this._scanCandidates = new Map();
+    this._connectionStatus("scanning", "正在扫描郊狼 V2 / V3 主机（约 5 秒）");
+    try {
+      const bluetooth = new webbluetooth.Bluetooth({
+        deviceFound: (device, select) => {
+          if (this.connection.state !== "scanning" || !this._scanCandidates) return false;
+          const version = coyoteVersion(device.name);
+          if (!version || !device.id || this._scanCandidates.has(device.id)) return false;
+          this._scanCandidates.set(device.id, { device, select, version });
+          this._connectionStatus("scanning", `已发现 ${this._scanCandidates.size} 台郊狼主机，继续扫描`);
+          return false;
+        },
+      });
+      this._scanBluetooth = bluetooth;
+      const request = bluetooth.requestDevice({ filters: COYOTE_FILTERS, optionalServices: COYOTE_SERVICES });
+      this._scanRequest = request;
+      await Promise.race([
+        new Promise(resolve => setTimeout(resolve, this.scanDurationMs)),
+        request.then(() => { throw new Error("扫描时设备被提前选中"); }, error => { throw error; }),
+      ]);
+      bluetooth.cancelRequest();
+      if (!this._scanCandidates) return [];
+      const devices = [...this._scanCandidates.values()].map(({ device, version }) => ({
+        id: device.id, name: device.name, version,
+      }));
+      if (!devices.length) throw new Error("未发现郊狼 V2 / V3 主机，请检查设备电源和电脑蓝牙");
+      this._connectionStatus("selecting", `发现 ${devices.length} 台郊狼主机，请按设备 ID 选择`);
+      return devices;
+    } catch (error) {
+      this.cancelSelection();
+      const detail = error?.message || String(error);
+      this._connectionStatus("error", "扫描郊狼主机失败", detail);
+      throw new Error("扫描郊狼主机失败：" + detail);
+    }
+  }
+
+  cancelSelection() {
+    this._scanBluetooth?.cancelRequest();
+    this._scanBluetooth = null;
+    this._scanCandidates = null;
+    this._scanRequest = null;
+    this.scanning = false;
+    this._connectionStatus("idle", "已取消设备选择");
+  }
+
+  async connect(deviceId) {
     if (this.connected || this.connecting) {
       return;
     }
+    if (this.scanning && deviceId === undefined) throw new Error("请先选择要连接的设备 ID");
 
     this.connecting = true;
+    this.scanning = false;
     this.connection.startedAt = Date.now();
     try {
-      await this._connect();
+      await this._connect(deviceId);
       if (!this.server?.connected) throw new Error("初始化期间蓝牙连接已断开");
       this.connected = true;
       this._connectionStatus("connected", "已连接 " + (this.device.name || `Coyote ${this.version}.0`));
@@ -101,21 +160,30 @@ class CoyoteController extends EventEmitter {
     this.emit("connectionChanged", this.connection);
   }
 
-  async _connect() {
-    this._connectionStatus("connecting", "正在搜索郊狼 V2 / V3 主机");
+  async _connect(deviceId) {
+    this._connectionStatus("connecting", deviceId ? "正在连接所选设备" : "正在搜索郊狼 V2 / V3 主机");
 
     console.log("Requesting Coyote V2 / V3...");
 
-    this.device = await webbluetooth.bluetooth.requestDevice({
-      filters: [
-        { namePrefix: "D-LAB" },
-        { namePrefix: "47L121" },
-      ],
-      optionalServices: [BATTERY_SERVICE, CONTROL_SERVICE, V3_BATTERY_SERVICE, V3_CONTROL_SERVICE],
-    });
+    if (deviceId !== undefined) {
+      const selected = this._scanCandidates?.get(deviceId);
+      if (!selected) throw new Error("所选设备已失效，请重新扫描");
+      selected.select();
+      try { this.device = await this._scanRequest; }
+      finally {
+        this._scanCandidates = null;
+        this._scanRequest = null;
+        this._scanBluetooth = null;
+      }
+    } else {
+      this.device = await webbluetooth.bluetooth.requestDevice({
+        filters: COYOTE_FILTERS,
+        optionalServices: COYOTE_SERVICES,
+      });
+    }
 
     console.log(`Device: ${this.device.name}`);
-    this.version = this.device.name?.startsWith("47L121") ? 3 : this.device.name?.startsWith("D-LAB") ? 2 : null;
+    this.version = coyoteVersion(this.device.name);
     if (!this.version) throw new Error("只支持郊狼 V2 / V3 主机，不支持无线传感器");
 
     if (!this.device.gatt) {
@@ -778,6 +846,7 @@ class CoyoteController extends EventEmitter {
   }
 
   async disconnect() {
+    if (this.scanning || this._scanCandidates) this.cancelSelection();
     this._removeIntensityListener();
     this._clearAllTimers();
 
@@ -824,6 +893,7 @@ class CoyoteController extends EventEmitter {
   }
 
   dispose() {
+    if (this.scanning || this._scanCandidates) this.cancelSelection();
     this._removeIntensityListener();
     this._clearAllTimers();
 

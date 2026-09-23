@@ -14,6 +14,7 @@ class CoyoteSidebarProvider {
     this.errorCount = 0;
     this.previousErrors = 0;
     this.streak = 0;
+    this.autoStatus = "等待保存或 VS Code 构建任务";
     this.view = null;
     this.manual = { channel:"A", durationMs:5000, waveformInterval:100 };
     this.onIntensityChanged = () => this.update();
@@ -37,13 +38,14 @@ class CoyoteSidebarProvider {
   status() {
     const c = this.controller, r = this.runtime;
     return {
-      connected: c.connected, battery: c.battery, deviceName: c.device?.name || "", version: c.version,
-      connecting: c.connecting, connection: c.connection,
+      connected: c.connected, battery: c.battery, deviceName: c.device?.name || "", deviceId: c.device?.id || "", version: c.version,
+      connecting: c.connecting || c.scanning, connection: c.connection,
       channelA: c.channelA, channelB: c.channelB, errorCount: this.errorCount,
       manual: this.manual, intensitySource:c.intensitySource, intensityUpdatedAt:c.intensityUpdatedAt,
       hasDeviceIntensity: c.intensitySource === "notification",
       controlEpoch:r.epoch,
       previousErrors: this.previousErrors, streak: this.streak,
+      autoStatus: r.config.autoTrigger ? this.autoStatus : "自动触发已关闭：在规则页勾选并保存规则",
       config: r.config, running: r.running, pending: r.pending, lastProposal: r.lastProposal,
       cooldownRemaining: Math.max(0, Math.ceil((r.cooldownUntil - Date.now()) / 1000)),
       events: r.events, raw: c.lastIntensityRaw, bridgeEnabled: !!this.bridge.server,
@@ -81,16 +83,32 @@ class CoyoteSidebarProvider {
         this.update(); break;
       case "connect":
         if (!vscode.workspace.isTrusted) throw new Error("请先信任此工作区");
-        if (this.controller.connected || this.controller.connecting) break;
-        await vscode.window.withProgress({
+        if (this.controller.connected || this.controller.connecting || this.controller.scanning) break;
+        {
+        const connected = await vscode.window.withProgress({
           location: vscode.ProgressLocation.Notification, title: "Coyote：连接设备", cancellable: false,
         }, async progress => {
           const report = connection => progress.report({ message: connection.message });
           this.controller.on("connectionChanged", report);
-          try { await this.controller.connect(); }
+          try {
+            const devices = await this.controller.scanDevices();
+            if (!devices.length) return false;
+            const selected = await vscode.window.showQuickPick(devices.map(device => ({
+              label: `V${device.version} · ${device.name}`,
+              description: device.id,
+              detail: "设备 ID：" + device.id,
+              id: device.id,
+            })), { placeHolder: "选择要连接的郊狼主机（按设备 ID 区分）", matchOnDescription: true });
+            if (!selected) { this.controller.cancelSelection(); return false; }
+            if (!this.controller.scanning) return false;
+            await this.controller.connect(selected.id);
+            return true;
+          }
           finally { this.controller.off("connectionChanged", report); }
         });
+        if (!connected) break;
         this.runtime.record("设备已连接"); break;
+        }
       case "disconnect":
         await this.runtime.stop("断开连接");
         await this.controller.disconnect(); break;
@@ -108,6 +126,7 @@ class CoyoteSidebarProvider {
         this.manual.channel = m.channel; break;
       case "stopManual": await this.runtime.stopManualWaveform(); break;
       case "stop":
+        if (this.controller.scanning) this.controller.cancelSelection();
         this.runtime.config.autoTrigger = false;
         await this.runtime.stop("紧急停止；自动触发已关闭"); break;
       case "config": await this.saveConfig(m.config); break;

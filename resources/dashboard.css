@@ -7,6 +7,7 @@ p { margin:7px 0; } .eyebrow { font-size:10px; letter-spacing:1.6px; color:var(-
 .brand,.device-line,.section-title { display:flex; justify-content:space-between; gap:8px; align-items:center; }
 .device-line,.small,small { font-size:11px; color:var(--vscode-descriptionForeground); }
 .device-line { margin:8px 0; } .badge { font-size:10px; border:1px solid var(--line); border-radius:99px; padding:3px 8px; white-space:nowrap; }
+#device { min-width:0; overflow-wrap:anywhere; } #battery { flex:none; white-space:nowrap; }
 .channels,.metrics,.pair { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:8px; }
 .channels > div { display:flex; justify-content:space-between; align-items:center; border-left:3px solid var(--vscode-charts-blue,#409cff); background:var(--vscode-textCodeBlock-background); padding:6px 10px; border-radius:4px; }
 .channels > div+div { border-left-color:var(--vscode-charts-purple,#ac84ff); } .channels strong { font-size:20px; font-variant-numeric:tabular-nums; }
@@ -37,6 +38,7 @@ canvas { display:block; width:100%; height:130px; } #simulationCanvas { height:9
 #proposalCard { border-left:3px solid var(--vscode-charts-purple,#ac84ff); }
 .connection-status { margin-top:8px; padding:6px 8px; border-left:3px solid var(--line); overflow-wrap:anywhere; font-size:12px; }
 .connection-status[data-state=connecting] { border-color:var(--vscode-focusBorder); }
+.connection-status[data-state=scanning],.connection-status[data-state=selecting] { border-color:var(--vscode-focusBorder); }
 .connection-status[data-state=connected] { border-color:var(--vscode-charts-green,#66b887); }
 .connection-status[data-state=error],.connection-status[data-state=disconnected] { border-color:var(--vscode-inputValidation-errorBorder,#d64f4f); }
 #connectionError { color:var(--vscode-errorForeground,#ef8686); white-space:pre-wrap; }

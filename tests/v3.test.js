@@ -68,7 +68,7 @@ test("V3 connection subscribes, writes BF then zero B0 and handles B1 notificati
   assert.equal(c.battery,82);
   assert.equal(notify.started,true);
   assert.deepEqual(services,["0000180a-0000-1000-8000-00805f9b34fb","0000180c-0000-1000-8000-00805f9b34fb"]);
-  assert.deepEqual(Array.from(requests[0].filters, filter => filter.namePrefix),["D-LAB","47L121"]);
+  assert.deepEqual(Array.from(requests[0].filters, filter => filter.namePrefix),["D-LAB ESTIM01","47L121000"]);
   assert.equal(hex(writes[0]),"BFC8C880808080");
   assert.equal(hex(writes[1]),"B00F000000000000000000650000000000000065");
   await c.setIntensity(14,23);

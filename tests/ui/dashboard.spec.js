@@ -59,6 +59,19 @@ test("offline preview, rule drafts, preset and AI scene interactions", async ({ 
   await page.goto("http://coyote.test/");
   await expect(page.locator("#errors")).toHaveText("8");
   await expect(page.locator("#errorDelta")).toHaveText("减少 6 个");
+  state.connecting=true;
+  state.connection={state:"scanning",message:"已发现 2 台郊狼主机，继续扫描",error:"",startedAt:Date.now()};
+  await post({command:"state",state});
+  await expect(page.locator("#connect")).toHaveText("正在扫描…");
+  await expect(page.locator("#connect")).toBeDisabled();
+  state.connection.state="selecting";
+  state.connection.message="发现 2 台郊狼主机，请按设备 ID 选择";
+  await post({command:"state",state});
+  await expect(page.locator("#connectionHint")).toContainText("VS Code 顶部列表");
+  state.connecting=false;
+  state.connection={state:"idle",message:"已取消设备选择",error:""};
+  await post({command:"state",state});
+  await expect(page.locator("#connect")).toBeEnabled();
   await page.locator("#connect").click();
   await expect(page.locator("#connect")).toBeDisabled();
   await expect(page.locator("#connect")).toHaveText("正在连接…");
@@ -82,9 +95,11 @@ test("offline preview, rule drafts, preset and AI scene interactions", async ({ 
   await page.locator("#connect").click();
   await expect(page.locator("#connectionError")).toBeHidden();
   state.connecting=false;state.connected=true;
+  state.deviceName="D-LAB ESTIM01";state.deviceId="host-2-long-bluetooth-device-id";
   state.connection={state:"connected",message:"已连接 D-LAB ESTIM01",error:""};
   await post({command:"state",state});
   await expect(page.locator("#connect")).toHaveText("已连接");
+  await expect(page.locator("#device")).toContainText("host-2-long-bluetooth-device-id");
   await expect(page.locator("#connectionHint")).toBeHidden();
   state.connected=false;state.connection={state:"disconnected",message:"设备连接已断开",error:""};
   await post({command:"state",state});
@@ -102,6 +117,7 @@ test("offline preview, rule drafts, preset and AI scene interactions", async ({ 
   await page.locator("#manualB").fill("44");
   await page.getByRole("tab",{name:"规则",exact:true}).click();
   await page.locator("#maxIntensity").fill("0");
+  await page.locator("#ignoreSameErrors").check();
   await page.locator("#cooldownSeconds").fill("0");
   await post({command:"state",state});
   await expect(page.locator("#maxIntensity")).toHaveValue("0");
@@ -111,6 +127,7 @@ test("offline preview, rule drafts, preset and AI scene interactions", async ({ 
   await expect(page.locator("#manualA")).toHaveValue("33");
   await expect(page.locator("#manualB")).toHaveValue("44");
   expect(state.config.maxIntensity).toBe(0);
+  expect(state.config.ignoreSameErrors).toBe(true);
   expect(state.config.cooldown).toBe(0);
   await page.locator("#maxIntensity").fill("100");
   await page.locator("#errorMapping").selectOption("stepped");

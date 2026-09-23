@@ -7,8 +7,8 @@ let catalog = {}, state, selected = saved.waveform || "frequencySweep", dirty = 
 let configSignature = "", previewTimer, simulateTimer, simulationId = 0, proposalId;
 let manualInitialized = false, manualTimer;
 let manualSettingsInitialized = false;
-const fields = ["autoTrigger","scope","onlyNew","channel","scaleByErrors","errorMapping","reminderEnd","warningEnd","intensity","maxIntensity","durationMs","maxDurationMs","waveformName"];
-const booleans = new Set(["autoTrigger","onlyNew","scaleByErrors"]);
+const fields = ["autoTrigger","scope","onlyNew","ignoreSameErrors","channel","scaleByErrors","errorMapping","reminderEnd","warningEnd","intensity","maxIntensity","durationMs","maxDurationMs","waveformName"];
+const booleans = new Set(["autoTrigger","onlyNew","ignoreSameErrors","scaleByErrors"]);
 const numbers = new Set(["reminderEnd","warningEnd","intensity","maxIntensity","durationMs","maxDurationMs"]);
 function send(command, data = {}) { vscode.postMessage({ command, ...data }); }
 function saveView() { vscode.setState({ tab: document.querySelector('[role=tab][aria-selected=true]').dataset.tab, waveform: selected }); }
@@ -58,6 +58,7 @@ function simulate() {
 }
 [...fields,"cooldownSeconds"].forEach(id => $(id).addEventListener("input", () => {
   dirty = true; $("draftStatus").textContent = "有未保存更改 · 试算已使用当前表单"; mappingHint(); simulate();
+  $("autoStatus").textContent = "规则有未保存更改；" + (state?.autoStatus || "请保存规则后生效");
 }));
 $("simulateCount").addEventListener("input", simulate);
 $("saveConfig").onclick = () => {
@@ -183,25 +184,30 @@ function render(s) {
     manualSettingsInitialized = true;
   }
   const connecting = !!s.connecting;
+  const scanning = s.connection?.state === "scanning";
+  const selecting = s.connection?.state === "selecting";
   const failed = s.connection?.state === "error";
   const elapsed = connecting ? Math.max(0, Math.floor((Date.now() - (s.connection?.startedAt || Date.now())) / 1000)) : 0;
-  $("connection").textContent = connecting ? "◌ 连接中" : s.connected ? "● 已连接" : failed ? "! 连接失败" : "○ 未连接";
+  $("connection").textContent = selecting ? "◌ 选择设备" : scanning ? "◌ 扫描中" : connecting ? "◌ 连接中" : s.connected ? "● 已连接" : failed ? "! 连接失败" : "○ 未连接";
   $("protocolVersion").textContent = s.version ? "COYOTE / V" + s.version : "COYOTE / V2 · V3";
-  $("connectionStatus").dataset.state = connecting ? "connecting" : s.connection?.state || "idle";
+  $("connectionStatus").dataset.state = s.connection?.state || "idle";
   $("connectionMessage").textContent = (s.connection?.message || (s.connected ? "设备已连接" : "尚未连接设备")) + (connecting ? " · 已等待 " + elapsed + " 秒" : "");
   $("connectionError").hidden = !s.connection?.error;
   $("connectionError").textContent = s.connection?.error || "";
   $("connectionHint").hidden = !connecting && !failed && !(s.connected && s.version === 3);
   $("connectionHint").textContent = failed
     ? "请检查电脑蓝牙、设备电源与距离，以及设备是否被手机 App 或其他程序占用，然后点击重试。"
+    : selecting ? "请在 VS Code 顶部列表中按设备 ID 选择要连接的主机。"
+    : scanning ? "正在查找郊狼主机，扫描结束后会列出设备 ID。"
     : elapsed >= 15 ? "连接仍在等待蓝牙响应。请检查设备电源、电脑蓝牙，以及是否有其他程序占用设备。"
-    : connecting ? "请保持设备开机并靠近电脑；如出现设备选择窗口，请完成选择。"
+    : connecting ? "请保持设备开机并靠近电脑。"
     : "V3 已写入持久化设备参数：A/B 强度软上限 200，频率和强度平衡参数均为 128。";
-  $("device").textContent = s.deviceName || "等待设备";
+  $("autoStatus").textContent = dirty ? "规则有未保存更改；" + s.autoStatus : s.autoStatus;
+  $("device").textContent = s.deviceName ? s.deviceName + (s.deviceId ? " · " + s.deviceId : "") : "等待设备";
   $("battery").textContent = "电量 " + (s.battery == null ? "—" : s.battery+"%");
   $("channelA").textContent = s.channelA; $("channelB").textContent = s.channelB;
   $("connect").disabled = s.connected || connecting;
-  $("connect").textContent = connecting ? "正在连接…" : s.connected ? "已连接" : failed ? "重试连接" : "连接设备";
+  $("connect").textContent = selecting ? "选择设备中…" : scanning ? "正在扫描…" : connecting ? "正在连接…" : s.connected ? "已连接" : failed ? "重试连接" : "连接设备";
   $("connect").setAttribute("aria-busy", String(connecting));
   $("disconnect").disabled = !s.connected || connecting;
   $("batteryRead").disabled = !s.connected;
