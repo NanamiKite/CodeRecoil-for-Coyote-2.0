@@ -33,6 +33,8 @@ Thumbs.db
 
 # Node.js dependencies
 node_modules/
+test-results/
+playwright-report/
 
 # Build / packaging output
 dist/

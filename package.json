@@ -5,15 +5,12 @@
   "version": "0.1.0",
   "publisher": "nanami",
   "license": "MIT",
-
   "engines": {
     "vscode": "^1.90.0"
   },
-
   "categories": [
     "Other"
   ],
-
   "activationEvents": [
     "onView:coyotePunisher.sidebar",
     "onCommand:coyotePunisher.connect",
@@ -22,11 +19,10 @@
     "onCommand:coyotePunisher.manualTest",
     "onCommand:coyotePunisher.setIntensity"
   ],
-
   "main": "./src/extension.js",
-
+  "extensionKind": ["ui"],
+  "capabilities": { "untrustedWorkspaces": { "supported": false } },
   "contributes": {
-
     "commands": [
       {
         "command": "coyotePunisher.connect",
@@ -49,14 +45,12 @@
         "title": "Coyote: Set Intensity"
       }
     ],
-
     "keybindings": [
       {
         "command": "coyotePunisher.emergencyStop",
         "key": "ctrl+alt+s"
       }
     ],
-
     "viewsContainers": {
       "activitybar": [
         {
@@ -66,7 +60,6 @@
         }
       ]
     },
-
     "views": {
       "coyotePunisher": [
         {
@@ -76,51 +69,51 @@
         }
       ]
     },
-
     "configuration": {
       "title": "Coyote 2.0 Code Punisher",
-
       "properties": {
-
         "coyotePunisher.maxIntensity": {
           "type": "number",
           "default": 200,
           "minimum": 0,
-          "maximum": 2047
+          "maximum": 200,
+          "deprecationMessage": "请在 Coyote 侧边栏的规则页设置，规则按工作区保存。"
         },
-
         "coyotePunisher.maxDuration": {
+          "deprecationMessage": "请使用 Coyote 侧边栏的规则页。",
           "type": "number",
           "default": 5000,
           "minimum": 100,
           "maximum": 30000
         },
-
         "coyotePunisher.cooldown": {
+          "deprecationMessage": "请使用 Coyote 侧边栏的规则页。",
           "type": "number",
           "default": 15,
           "minimum": 0,
           "maximum": 3600
         },
-
         "coyotePunisher.autoTrigger": {
           "type": "boolean",
-          "default": true
+          "default": false,
+          "deprecationMessage": "自动触发请在 Coyote 侧边栏为当前会话开启。"
         }
-
       }
     }
   },
-
   "dependencies": {
-    "webbluetooth": "3.7.0"
+    "@modelcontextprotocol/sdk": "^1.26.0",
+    "webbluetooth": "3.7.0",
+    "zod": "^3.25.76"
   },
-
   "devDependencies": {
+    "@playwright/test": "^1.58.2",
     "@vscode/vsce": "^3.2.2"
   },
-
   "scripts": {
+    "test": "node --test tests/*.test.js",
+    "test:ui": "playwright test",
+    "mcp": "node src/mcp/server.js",
     "build": "npm install --omit=dev",
     "package": "npm install && node scripts/package.js"
   }

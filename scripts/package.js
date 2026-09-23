@@ -58,8 +58,8 @@ if (
  * 不使用 npm publish。
  * 不重新安装用户依赖。
  *
- * node_modules/webbluetooth 会直接
- * 被包含到 VSIX 中。
+ * 让 vsce 收集生产依赖，包括 webbluetooth 与 MCP SDK。
+ * --no-dependencies 会漏掉这些运行时依赖，不能使用。
  */
 
 run(
@@ -68,7 +68,6 @@ run(
         : "npx",
     [
         "vsce",
-        "package",
-        "--no-dependencies"
+        "package"
     ]
 );

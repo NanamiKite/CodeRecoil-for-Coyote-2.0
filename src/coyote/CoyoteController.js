@@ -1,4 +1,5 @@
 const webbluetooth = require("webbluetooth");
+const { EventEmitter } = require("events");
 const { CoyoteProtocol } = require("./CoyoteProtocol");
 const { CoyoteSafety } = require("./CoyoteSafety");
 
@@ -9,8 +10,11 @@ const PWM_AB2 = "955a1504-0fe2-f5aa-a094-84b8d4f3e8ad";
 const PWM_A34 = "955a1505-0fe2-f5aa-a094-84b8d4f3e8ad";
 const PWM_B34 = "955a1506-0fe2-f5aa-a094-84b8d4f3e8ad";
 
-class CoyoteController {
+class CoyoteController extends EventEmitter {
   constructor() {
+    super();
+    this.intensitySource = "none";
+    this.intensityUpdatedAt = 0;
     this.device = null;
     this.server = null;
 
@@ -21,6 +25,8 @@ class CoyoteController {
     this.pwmB34 = null;
 
     this.connected = false;
+    this.connecting = false;
+    this.connection = { state: "idle", message: "尚未连接设备", error: "", startedAt: 0 };
 
     this.battery = null;
 
@@ -55,9 +61,36 @@ class CoyoteController {
   }
 
   async connect() {
-    if (this.connected) {
+    if (this.connected || this.connecting) {
       return;
     }
+
+    this.connecting = true;
+    this.connection.startedAt = Date.now();
+    try {
+      await this._connect();
+      if (!this.server?.connected) throw new Error("初始化期间蓝牙连接已断开");
+      this.connected = true;
+      this._connectionStatus("connected", "已连接 " + (this.device.name || "Coyote 2.0"));
+    } catch (error) {
+      const stage = this.connection.message;
+      const detail = error?.message || String(error);
+      try { await this.disconnect(); } catch (_) {}
+      this._connectionStatus("error", stage + "失败", detail);
+      throw new Error(stage + "失败：" + detail);
+    } finally {
+      this.connecting = false;
+      this.emit("connectionChanged", this.connection);
+    }
+  }
+
+  _connectionStatus(state, message, error = "") {
+    this.connection = { ...this.connection, state, message, error };
+    this.emit("connectionChanged", this.connection);
+  }
+
+  async _connect() {
+    this._connectionStatus("connecting", "正在搜索 D-LAB 设备");
 
     console.log("Requesting Coyote 2.0...");
 
@@ -77,19 +110,23 @@ class CoyoteController {
     }
 
     console.log("Connecting GATT...");
+    this._connectionStatus("connecting", "正在连接设备蓝牙（GATT）");
 
     this.server = await this.device.gatt.connect();
 
     console.log("GATT connected.");
 
+    this._connectionStatus("connecting", "正在读取电量服务");
     const batteryService = await this.server.getPrimaryService(BATTERY_SERVICE);
 
     console.log(`Battery service: ${BATTERY_SERVICE}`);
 
+    this._connectionStatus("connecting", "正在读取控制服务");
     const controlService = await this.server.getPrimaryService(CONTROL_SERVICE);
 
     console.log(`Control service: ${CONTROL_SERVICE}`);
 
+    this._connectionStatus("connecting", "正在读取电量与 A/B 通道特性");
     this.batteryCharacteristic =
       await batteryService.getCharacteristic(BATTERY_LEVEL);
 
@@ -124,6 +161,7 @@ class CoyoteController {
      * 防止断开后 this.connected 仍为 true。
      */
     this._onDisconnected = () => {
+      this._removeIntensityListener();
       console.log("[Coyote] 设备已断开连接 (gattserverdisconnected)");
       this._clearAllTimers();
       this.connected = false;
@@ -132,15 +170,18 @@ class CoyoteController {
       this.channelB = 0;
       this.lastIntensityRaw = "--";
       this.battery = null;
+      this._connectionStatus("disconnected", "设备连接已断开，请检查设备电源和距离后重新连接");
+      this.emit("intensityChanged");
     };
     this.device.addEventListener("gattserverdisconnected", this._onDisconnected);
-
-    this.connected = true;
 
     /*
      * 先读取电量。
      */
+    this._connectionStatus("connecting", "正在读取设备电量");
     await this.readBattery();
+    this._connectionStatus("connecting", "正在订阅强度通知");
+    await this._subscribeIntensity();
 
     console.log("Coyote GATT services found.");
   }
@@ -267,6 +308,9 @@ class CoyoteController {
     this.lastIntensityRaw = hex;
 
     this.active = a > 0 || b > 0;
+    this.intensitySource = "write";
+    this.intensityUpdatedAt = Date.now();
+    this.emit("intensityChanged");
   }
 
   /**
@@ -421,7 +465,10 @@ class CoyoteController {
     }
 
     const value = await this.pwmAB2.readValue();
+    return this._applyIntensityValue(value, "read");
+  }
 
+  _applyIntensityValue(value, source = "notification") {
     const data = new Uint8Array(
       value.buffer,
       value.byteOffset,
@@ -453,11 +500,40 @@ class CoyoteController {
     console.log(`PWM_AB2 -> App A=${this.channelA} B=${this.channelB}`);
 
     this.active = this.channelA > 0 || this.channelB > 0;
+    this.intensitySource = source;
+    this.intensityUpdatedAt = Date.now();
+    this.emit("intensityChanged");
 
     return {
       a: this.channelA,
       b: this.channelB,
     };
+  }
+
+  async _subscribeIntensity() {
+    this._removeIntensityListener();
+    const characteristic = this.pwmAB2;
+    if (!characteristic?.properties?.notify || typeof characteristic.startNotifications !== "function") return;
+    this._intensityCharacteristic = characteristic;
+    this._onIntensityChanged = event => {
+      if (!this.connected) return;
+      try { this._applyIntensityValue(event.target.value); }
+      catch (e) { console.warn("Invalid intensity notification:", e.message); }
+    };
+    characteristic.addEventListener("characteristicvaluechanged", this._onIntensityChanged);
+    try { await characteristic.startNotifications(); }
+    catch (e) {
+      this._removeIntensityListener();
+      console.warn("Intensity notifications unavailable:", e.message);
+    }
+  }
+
+  _removeIntensityListener() {
+    if (this._intensityCharacteristic && this._onIntensityChanged) {
+      this._intensityCharacteristic.removeEventListener("characteristicvaluechanged", this._onIntensityChanged);
+    }
+    this._intensityCharacteristic = null;
+    this._onIntensityChanged = null;
   }
 
   async setWaveformA(x, y, z) {
@@ -573,6 +649,7 @@ class CoyoteController {
   }
 
   async disconnect() {
+    this._removeIntensityListener();
     this._clearAllTimers();
 
     try {
@@ -606,12 +683,14 @@ class CoyoteController {
       this.lastIntensityRaw = "--";
 
       this.active = false;
+      this._connectionStatus("idle", "已断开设备连接");
     }
 
     console.log("Coyote disconnected.");
   }
 
   dispose() {
+    this._removeIntensityListener();
     this._clearAllTimers();
 
     try {
