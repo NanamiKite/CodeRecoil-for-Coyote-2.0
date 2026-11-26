@@ -37,7 +37,7 @@ Harness YAML 片段示意：
     serverName: coyote
     transport: stdio
     command: node
-    args: ['D:/vscode-coyote-punisher/src/mcp/server.js']
+    args: ['D:/.../src/mcp/server.js']
     env:
       COYOTE_BRIDGE_PORT: '<从控制台复制>'
       COYOTE_BRIDGE_TOKEN: '<从控制台复制>'

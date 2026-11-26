@@ -1,5 +1,6 @@
 "use strict";
 // Standalone stdio adapter: stdout is exclusively MCP traffic. BLE stays in VS Code.
+const { version } = require("../../package.json");
 const { Server } = require("@modelcontextprotocol/sdk/server/index.js");
 const { StdioServerTransport } = require("@modelcontextprotocol/sdk/server/stdio.js");
 const { ListToolsRequestSchema, CallToolRequestSchema } = require("@modelcontextprotocol/sdk/types.js");
@@ -41,7 +42,7 @@ function callBridge(name, args) {
   });
 }
 function createServer() {
-  const server = new Server({ name: "coyote-scenes", version: "0.2.0" }, { capabilities: { tools: {} },
+  const server = new Server({ name: "coyote-scenes", version }, { capabilities: { tools: {} },
     instructions: "Use scene tools for contextual conversation. In code-challenge mode, read coyote_challenge_status and narrate the current checkpoint; do not invent progress. Check status and scene list before a proposal. Proposals require a local click; pending is never approval. Respect skipped/expired proposals. Stop immediately when asked. Never infer sensations or medical effects from output parameters.",
   });
   server.setRequestHandler(ListToolsRequestSchema, async () => ({ tools }));

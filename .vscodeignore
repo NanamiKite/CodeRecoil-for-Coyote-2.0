@@ -1,0 +1,16 @@
+# Development files
+.gitignore
+.vscodeignore
+package-lock.json
+playwright.config.js
+scripts/
+tests/
+docs/
+test-results/
+playwright-report/
+*.vsix
+
+# Local agent / cloud credentials
+.agents/
+.aws/
+.codex/

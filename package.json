@@ -2,9 +2,30 @@
   "name": "coyote-2-code-punisher",
   "displayName": "Coyote V2/V3 Code Punisher",
   "description": "Coyote V2/V3 VS Code game feedback controller",
-  "version": "0.1.0",
-  "publisher": "nanami",
-  "license": "MIT",
+  "version": "2.2.0",
+  "publisher": "NanamiKite",
+  "license": "GPL-3.0-only",
+  "repository": {
+    "type": "git",
+    "url": "https://github.com/NanamiKite/CodeRecoil-for-Coyote-2.0.git"
+  },
+  "bugs": {
+    "url": "https://github.com/NanamiKite/CodeRecoil-for-Coyote-2.0/issues"
+  },
+  "homepage": "https://github.com/NanamiKite/CodeRecoil-for-Coyote-2.0#readme",
+  "icon": "resources/icon.png",
+  "galleryBanner": {
+    "color": "#0F172A",
+    "theme": "dark"
+  },
+  "keywords": [
+    "coyote",
+    "dglab",
+    "bluetooth",
+    "feedback",
+    "gamification",
+    "mcp"
+  ],
   "engines": {
     "vscode": "^1.90.0"
   },
@@ -108,7 +129,7 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.58.2",
-    "@vscode/vsce": "^3.2.2"
+    "@vscode/vsce": "~3.9.2"
   },
   "scripts": {
     "test": "node --test tests/*.test.js",
