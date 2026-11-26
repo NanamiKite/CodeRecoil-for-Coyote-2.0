@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="https://raw.githubusercontent.com/NanamiKite/CodeRecoil-for-Coyote-2.0/master/resources/icon.png" width="96" alt="Coyote V2/V3 Code Punisher">
+  <img src="resources/icon.png" width="96" alt="Coyote V2/V3 Code Punisher">
 </p>
 
 <h1 align="center">Coyote V2/V3 Code Punisher</h1>
@@ -18,7 +18,7 @@
 </p>
 
 <p align="center">
-  <img src="https://raw.githubusercontent.com/NanamiKite/CodeRecoil-for-Coyote-2.0/master/docs/screenshot.png" width="380" alt="Coyote 侧边栏概览">
+  <img src="docs/screenshot.png" width="380" alt="Coyote 侧边栏概览">
 </p>
 
 通过蓝牙连接郊狼 V2 / V3 主机，在 VS Code 保存文件、构建任务启动或构建失败时按错误数量自动触发电脉冲输出。也可以手动设置强度、通道和波形，或让 Codex、Claude Code、DeepSeek Harness 通过本地 MCP 主持场景。
